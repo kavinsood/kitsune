@@ -1,0 +1,8 @@
+{
+  "apps": {
+    "TestTech": {
+      "cats": [1, 18, 52],
+      "html": [{"regex": "irrelevant"}]
+    }
+  }
+} 

@@ -1,0 +1,11 @@
+{
+  "apps": {
+    "TestTech": {
+      "html": [{"regex": "bodytextonly"}],
+      "scripts": [{"regex": "inlinescriptonly"}],
+      "scriptSrc": [{"regex": "externalscriptonly.js"}],
+      "meta": {"generator": [{"regex": "WordPressOnly"}]},
+      "cats": [999]
+    }
+  }
+} 

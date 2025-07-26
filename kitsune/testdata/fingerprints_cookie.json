@@ -1,0 +1,8 @@
+{
+  "apps": {
+    "CookieTech": {
+      "cookies": {"sessionid": {"regex": "^abc123$"}},
+      "html": [{"regex": "irrelevant"}]
+    }
+  }
+} 
