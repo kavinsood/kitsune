@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os" // Add this import
+	"strings"
 
 	"github.com/kavinsood/kitsune/kitsune"
 
@@ -122,26 +123,68 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
 }
 
+// corsMiddleware wraps an http.Handler to enforce CORS policies.
+func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Check if the origin is in our allowed list
+		for _, allowedOrigin := range allowedOrigins {
+			if origin == allowedOrigin {
+				w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+				w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+				break
+			}
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func main() {
+	// --- Read configuration from environment ---
+	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+	var allowedOrigins []string
+
+	if allowedOriginsStr == "" {
+		// Default to localhost for development
+		allowedOrigins = []string{"http://localhost:3000"}
+	} else {
+		// Parse comma-separated list of origins
+		allowedOrigins = strings.Split(allowedOriginsStr, ",")
+		// Trim whitespace from each origin
+		for i, origin := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(origin)
+		}
+	}
+
 	server, err := NewServer()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// Set up routes
-	http.HandleFunc("/analyze", server.handleAnalyze)
-	http.HandleFunc("/health", server.handleHealth)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/analyze", server.handleAnalyze)
+	mux.HandleFunc("/health", server.handleHealth)
 
-	// Use the PORT environment variable provided by Render
+	// Pass the configured origins to the middleware.
+	handler := corsMiddleware(mux, allowedOrigins)
+
+	// Use the PORT environment variable provided by Render.
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080" // Fallback for local development
+		port = "8080" // Hardcoded default for localhost development
 	}
 
-	log.Printf("Starting Kitsune server on port %s", port)
+	log.Printf("Starting Kitsune server on port %s, allowing origins: %v", port, allowedOrigins)
 
-	// Listen on all interfaces with the correct port
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	if err := http.ListenAndServe(":"+port, handler); err != nil {
 		log.Fatal(err)
 	}
 }
