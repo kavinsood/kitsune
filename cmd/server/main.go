@@ -103,9 +103,7 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	const maxBodySize = 5 * 1024 * 1024 // 5 MB
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodySize)
 	type analyzeRequest struct {
-		URL     string            `json:"url"`
-		Headers map[string]string `json:"headers,omitempty"`
-		Body    string            `json:"body,omitempty"`
+		URL string `json:"url"`
 	}
 	var req analyzeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -116,7 +114,6 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		s.handleError(w, errors.New("URL is required"), http.StatusBadRequest)
 		return
 	}
-	// Ignore headers/body fields, always analyze by URL
 	s.analyzeAndRespond(w, req.URL)
 }
 
