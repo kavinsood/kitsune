@@ -172,3 +172,76 @@ func TestScriptPatternRawHTML(t *testing.T) {
 		t.Errorf("Did not expect TestTech to be detected when script pattern is not present")
 	}
 }
+
+func TestGenericSelectorRegex(t *testing.T) {
+	// Test cases that should be rejected (generic selectors)
+	genericSelectors := []string{
+		"div",
+		"span",
+		"body > div",
+		"header + main",
+		"nav ~ footer",
+		"custom-element",
+		"div span",
+		"body > div > span",
+	}
+
+	// Test cases that should be allowed (specific selectors)
+	specificSelectors := []string{
+		"div.class",
+		"#main",
+		"div[data-test]",
+		"div[class=main]",
+		"div.specific-class",
+		"#header .nav",
+		"div[data-test-id='main-app']",
+		"div.class > span",
+		"div:first-child",
+		"div::before",
+	}
+
+	// Test generic selectors (should match the regex and be rejected)
+	for _, selector := range genericSelectors {
+		if !genericSelectorRegex.MatchString(selector) {
+			t.Errorf("Generic selector '%s' should match the regex but doesn't", selector)
+		}
+	}
+
+	// Test specific selectors (should NOT match the regex and be allowed)
+	for _, selector := range specificSelectors {
+		if genericSelectorRegex.MatchString(selector) {
+			t.Errorf("Specific selector '%s' should NOT match the regex but does", selector)
+		}
+	}
+}
+
+func TestDOMConfidenceScoring(t *testing.T) {
+	// Test cases for different confidence levels
+	testCases := []struct {
+		selector    string
+		expected    ConfidenceLevel
+		description string
+	}{
+		// Low confidence cases (basic selectors)
+		{"div.class", ConfidenceLow, "Basic class selector"},
+		{"span[data-test]", ConfidenceLow, "Basic attribute selector without value"},
+		{"div > span", ConfidenceLow, "Basic combinator selector"},
+
+		// Medium confidence cases (more specific selectors)
+		{"#main", ConfidenceMedium, "ID selector"},
+		{"div[data-test='value']", ConfidenceMedium, "Attribute selector with value"},
+		{"div:first-child", ConfidenceMedium, "Pseudo-selector"},
+		{"div::before", ConfidenceMedium, "Pseudo-element"},
+		{"#header .nav", ConfidenceMedium, "ID with class"},
+		{"div[data-test='value']:hover", ConfidenceMedium, "Attribute with pseudo-selector"},
+		{"#main[data-test='value']", ConfidenceMedium, "ID with attribute value"},
+	}
+
+	for _, tc := range testCases {
+		result := calculateDOMConfidence(tc.selector)
+		if result != tc.expected {
+			t.Errorf("Selector '%s' (%s): expected %v, got %v",
+				tc.selector, tc.description, tc.expected, result)
+		}
+	}
+}

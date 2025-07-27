@@ -3961,10 +3961,10 @@
       "icon": "Amazon.svg",
       "dom": [
         {
-          "regex": "a['\\*\\.=acefhm-orz]"
+          "regex": "a['\\*\\.=aefhm-ortz]"
         },
         {
-          "regex": "a['\\*\\.=aefhm-ortz]"
+          "regex": "a['\\*\\.=acefhm-orz]"
         }
       ]
     },
@@ -6169,13 +6169,13 @@
       "icon": "Astro.svg",
       "dom": [
         {
-          "regex": "link['\\*/=_aefhor-t][\\$'\\.=cefhrs]"
-        },
-        {
           "regex": "astro-root"
         },
         {
           "regex": "link['\\*/=_aefhor-t]"
+        },
+        {
+          "regex": "link['\\*/=_aefhor-t][\\$'\\.=cefhrs]"
         }
       ]
     },
@@ -15905,10 +15905,10 @@
       "icon": "ThemeGrill.svg",
       "dom": [
         {
-          "regex": "link['\\*=acdgilmor]"
+          "regex": "body['\\*=aceg-t]"
         },
         {
-          "regex": "body['\\*=aceg-t]"
+          "regex": "link['\\*=acdgilmor]"
         }
       ]
     },
@@ -26560,13 +26560,13 @@
       "icon": "Font Awesome.svg",
       "dom": [
         {
+          "regex": "link['\\*=aefhm-or-tw]"
+        },
+        {
           "regex": "['\\*=acfls]"
         },
         {
           "regex": "link['\\*=aefhmorsw]"
-        },
-        {
-          "regex": "link['\\*=aefhm-or-tw]"
         }
       ]
     },
@@ -27543,10 +27543,10 @@
       "icon": "Froala.svg",
       "dom": [
         {
-          "regex": "(?-s:.fr-view, .fr-box, .fr-popup)"
+          "regex": "(?-s:.froala-box)"
         },
         {
-          "regex": "(?-s:.froala-box)"
+          "regex": "(?-s:.fr-view, .fr-box, .fr-popup)"
         }
       ]
     },
@@ -28701,13 +28701,13 @@
       "icon": "generatepress.svg",
       "dom": [
         {
-          "regex": "body['\\*=aceghl-npr-t]"
-        },
-        {
           "regex": "link['\\*=ad-ty]"
         },
         {
           "regex": "link['\\*=adeginpr-t]"
+        },
+        {
+          "regex": "body['\\*=aceghl-npr-t]"
         }
       ]
     },
@@ -29894,10 +29894,10 @@
       "icon": "default.svg",
       "dom": [
         {
-          "regex": "link['\\*\\./=a-hlnor-uy]"
+          "regex": "a['\\*\\.=abd-fhopr]"
         },
         {
-          "regex": "a['\\*\\.=abd-fhopr]"
+          "regex": "link['\\*\\./=a-hlnor-uy]"
         }
       ]
     },
@@ -32711,10 +32711,10 @@
       "icon": "ThemeIsle.svg",
       "dom": [
         {
-          "regex": "body['\\*=a-t]"
+          "regex": "link['\\*=adehist]"
         },
         {
-          "regex": "link['\\*=adehist]"
+          "regex": "body['\\*=a-t]"
         }
       ]
     },
@@ -35573,10 +35573,10 @@
       "icon": "Instatus.svg",
       "dom": [
         {
-          "regex": "a['\\*\\.=acefhim-or-u]['=_abegklnrt], iframe['\\*\\.=acim-or-u]"
+          "regex": "(?-s:a.footer__link)"
         },
         {
-          "regex": "(?-s:a.footer__link)"
+          "regex": "a['\\*\\.=acefhim-or-u]['=_abegklnrt], iframe['\\*\\.=acim-or-u]"
         }
       ]
     },
@@ -47878,10 +47878,10 @@
       "icon": "Netlify.svg",
       "dom": [
         {
-          "regex": "script#__NEXT_DATA__"
+          "regex": "header[a-t]"
         },
         {
-          "regex": "header[a-t]"
+          "regex": "script#__NEXT_DATA__"
         }
       ]
     },
@@ -47991,10 +47991,10 @@
       "icon": "ThemeIsle.svg",
       "dom": [
         {
-          "regex": "body['\\*=ace-tv]"
+          "regex": "link['\\*=d-tvy]"
         },
         {
-          "regex": "link['\\*=d-tvy]"
+          "regex": "body['\\*=ace-tv]"
         }
       ]
     },
@@ -58362,16 +58362,16 @@
       "icon": "Quasar.svg",
       "dom": [
         {
-          "regex": "div#q-app"
-        },
-        {
-          "regex": "(?-s:div.q-notifications)"
-        },
-        {
           "regex": "(?-s:div.q-page-container)"
         },
         {
           "regex": "(?-s:span.q-focus-helper)"
+        },
+        {
+          "regex": "div#q-app"
+        },
+        {
+          "regex": "(?-s:div.q-notifications)"
         }
       ]
     },
@@ -60657,10 +60657,10 @@
       "icon": "Refersion.svg",
       "dom": [
         {
-          "regex": "a['\\*\\.=cefhim-ors]"
+          "regex": "img['\\*\\.=c-fim-ors],img['\\*\\./3=_acefil-or-twz]"
         },
         {
-          "regex": "img['\\*\\.=c-fim-ors],img['\\*\\./3=_acefil-or-twz]"
+          "regex": "a['\\*\\.=cefhim-ors]"
         }
       ]
     },
@@ -70270,10 +70270,10 @@
       "icon": "Sphinx.svg",
       "dom": [
         {
-          "regex": "(?-s:div.sphinxsidebar \u003e div.sphinxsidebarwrapper)"
+          "regex": "(?-s:p.sphinx-version)"
         },
         {
-          "regex": "(?-s:p.sphinx-version)"
+          "regex": "(?-s:div.sphinxsidebar \u003e div.sphinxsidebarwrapper)"
         }
       ]
     },
@@ -78168,13 +78168,13 @@
       "icon": "WordPress.svg",
       "dom": [
         {
-          "regex": "style#wp-webfonts-inline-css"
-        },
-        {
           "regex": "link#twentytwentytwo-style-css"
         },
         {
           "regex": "style#webfonts-inline-css"
+        },
+        {
+          "regex": "style#wp-webfonts-inline-css"
         }
       ]
     },
@@ -78211,10 +78211,10 @@
       "icon": "TwicPics.svg",
       "dom": [
         {
-          "regex": "data-twic-background"
+          "regex": "(?-s:.twic)"
         },
         {
-          "regex": "(?-s:.twic)"
+          "regex": "data-twic-background"
         }
       ]
     },
@@ -80181,10 +80181,10 @@
       "icon": "ValueCommerce.svg",
       "dom": [
         {
-          "regex": "a['\\*\\.=acefhlmopruv]"
+          "regex": "img['\\*\\.=acelmoprsuv],img['\\*\\.=a-v]"
         },
         {
-          "regex": "img['\\*\\.=acelmoprsuv],img['\\*\\.=a-v]"
+          "regex": "a['\\*\\.=acefhlmopruv]"
         }
       ]
     },
@@ -80696,10 +80696,10 @@
       "icon": "Verifone.svg",
       "dom": [
         {
-          "regex": "#order__processedby"
+          "regex": "link['\\*\\.2=cefhkmortu]"
         },
         {
-          "regex": "link['\\*\\.2=cefhkmortu]"
+          "regex": "#order__processedby"
         }
       ]
     },

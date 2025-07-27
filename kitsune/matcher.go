@@ -387,6 +387,41 @@ func matchRobots(k *Kitsune, data *AnalysisData, detected map[string]Detection) 
 	}
 }
 
+// calculateDOMConfidence determines the confidence level for a DOM selector match
+// based on the specificity and uniqueness of the selector.
+func calculateDOMConfidence(selector string) ConfidenceLevel {
+	// Start with the default low confidence.
+	confidence := ConfidenceLow
+
+	// An ID selector is a strong, unique signal. Bump its confidence.
+	if strings.Contains(selector, "#") {
+		confidence = ConfidenceMedium
+	}
+
+	// Additional heuristics for more nuanced scoring:
+	// - Attribute selectors with specific values are more reliable than generic ones
+	// - Multiple specificity indicators increase confidence
+	// - Pseudo-selectors can indicate more specific targeting
+
+	// Check for attribute selectors with specific values (e.g., [data-test="value"])
+	if strings.Contains(selector, "=") {
+		confidence = ConfidenceMedium
+	}
+
+	// Check for pseudo-selectors which often indicate more specific targeting
+	if strings.Contains(selector, ":") {
+		confidence = ConfidenceMedium
+	}
+
+	// If we have both ID and other specificity indicators, we could consider High confidence
+	// but for now, we'll cap at Medium to be conservative
+	if strings.Contains(selector, "#") && (strings.Contains(selector, "=") || strings.Contains(selector, ":")) {
+		confidence = ConfidenceMedium // Could be ConfidenceHigh in the future
+	}
+
+	return confidence
+}
+
 // matchDOM uses CSS selectors for matching, not regex.
 func matchDOM(k *Kitsune, data *AnalysisData, detected map[string]Detection) {
 	if data.PageData == nil || data.PageData.GoQueryDoc == nil {
@@ -396,13 +431,23 @@ func matchDOM(k *Kitsune, data *AnalysisData, detected map[string]Detection) {
 	for _, pi := range k.matcher.DOMPatterns {
 		// Here, the pattern's "regex" string is actually a CSS selector.
 		selector := pi.Pattern.String()
+
+		// Skip overly generic DOM selectors that lack specificity
+		// This prevents false positives from selectors like "a,body" or "style,script"
+		if genericSelectorRegex.MatchString(selector) {
+			continue
+		}
+
 		if doc.Find(selector).Length() > 0 {
+			// Calculate confidence based on selector specificity.
+			confidence := calculateDOMConfidence(selector)
+
 			// DOM patterns rarely have version info, so we use an empty Detection struct.
 			detected[pi.AppName] = Detection{
 				DetectedBy:     "dom",
 				MatchedPattern: selector,
 				MatchedValue:   "CSS selector matched",
-				Confidence:     ConfidenceLow, // DOM patterns are low confidence (even after filtering)
+				Confidence:     confidence, // Use the calculated confidence.
 			}
 		}
 	}

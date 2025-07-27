@@ -11,7 +11,7 @@ import (
 func main() {
 	// A standard browser User-Agent
 	userAgent := "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-	url := "https://hackerone.com"
+	url := "https://kavinsood.com"
 
 	// Create a new request
 	req, err := http.NewRequest("GET", url, nil)
@@ -65,6 +65,20 @@ func main() {
 		fmt.Printf("\nCategory: %s\n", cat)
 		for _, tech := range techs {
 			fmt.Printf("  - %s\n", tech)
+		}
+	}
+
+	// Debug section for problematic detections
+	fmt.Printf("\n===== DEBUG: Problematic Detections =====\n")
+	for tech, details := range technologies {
+		// Check if it's one of the problematic detections
+		if tech == "Wagtail" || tech == "SvelteKit" {
+			fmt.Printf("DEBUG: Found %s\n", tech)
+			fmt.Printf("  - DetectedBy: %s\n", details.DetectedBy)
+			fmt.Printf("  - MatchedPattern: %s\n", details.MatchedPattern)
+			fmt.Printf("  - MatchedValue: %s\n", details.MatchedValue)
+			fmt.Printf("  - Version: %s\n", details.Version)
+			fmt.Printf("  - Confidence: %d\n", details.Confidence)
 		}
 	}
 	fmt.Printf("\n========================================================\n")

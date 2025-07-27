@@ -26,6 +26,16 @@ import (
 //go:embed categories_data.json fingerprints_data.json
 var embeddedFS embed.FS
 
+// Compile patterns that are used repeatedly at the package level.
+var (
+	// Regex to match overly generic DOM selectors that lack specificity
+	// This matches strings that only contain tags, combinators, and simple attributes
+	// but rejects anything with classes (.), IDs (#), or complex attributes ([attr=value])
+	// Note: hyphen is placed at the end to avoid being interpreted as a range
+	// Updated to include commas and other problematic characters
+	genericSelectorRegex = regexp.MustCompile(`^[a-zA-Z0-9\s>+~_,-]+$`)
+)
+
 // HTTPDoer is an interface satisfied by *http.Client and compatible clients.
 type HTTPDoer interface {
 	Do(req *http.Request) (*http.Response, error)
@@ -153,7 +163,9 @@ func (e *AnalysisError) Error() string {
 
 // IsFatal returns true if a critical error occurred that should stop the analysis.
 func (e *AnalysisError) IsFatal() bool {
-	return e.MainPageErr != nil || e.DNSErr != nil
+	// Only a failure to get the main page should be fatal.
+	// DNS lookup failures (TXT/MX records) should not stop the analysis.
+	return e.MainPageErr != nil
 }
 
 // FingerprintURL is the new main entry point for analysis.
@@ -429,8 +441,10 @@ func (k *Kitsune) BuildEfficientMatcher() {
 				continue // Reject the pattern.
 			}
 
-			// Gate 2: Check for a specificity character. This is a powerful filter.
-			if !strings.ContainsAny(selector, ".#[") {
+			// Gate 2 (REVISED): Reject selectors that lack specificity.
+			// This is more robust than ContainsAny. It rejects "body > div"
+			// but allows "div[class=main]" or "div.specific-class".
+			if genericSelectorRegex.MatchString(selector) {
 				continue // Reject the pattern.
 			}
 

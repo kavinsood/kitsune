@@ -11,11 +11,20 @@ import (
 
 // --- JSON Normalization Helpers ---
 
-// Regex to match lookaround assertions (lookahead/lookbehind)
-var lookaroundRegex = regexp.MustCompile(`\(\?[!<=][^)]*\)`)
+// Compile patterns that are used repeatedly at the package level.
+var (
+	// Regex to match lookaround assertions (lookahead/lookbehind)
+	lookaroundRegex = regexp.MustCompile(`\(\?[!<=][^)]*\)`)
 
-// Regex to match in-pattern backreferences (e.g., \1, \2, but not \\1)
-var backreferenceRegex = regexp.MustCompile(`([^\\])\\([1-9])`)
+	// Regex to match in-pattern backreferences (e.g., \1, \2, but not \\1)
+	backreferenceRegex = regexp.MustCompile(`([^\\])\\([1-9])`)
+
+	// Regex to count alphanumeric characters in patterns
+	simpleCharCounter = regexp.MustCompile(`[a-zA-Z0-9]`)
+
+	// Regex to match backreferences for removal (e.g., \1, \2, etc.)
+	backrefRe = regexp.MustCompile(`\\([1-9][0-9]*)`)
+)
 
 // areParenthesesBalanced checks if parentheses are balanced in a regex string
 func areParenthesesBalanced(s string) bool {
@@ -83,6 +92,8 @@ var patternDenylist = map[string]struct{}{
 	"vue":      {},
 	"angular":  {},
 	"jquery":   {},
+	"svelte":   {}, // Too generic, needs more context like a version number or specific framework indicators
+	"wagtail":  {}, // Too generic, needs more context like specific Wagtail indicators
 }
 
 const minPatternLength = 4 // A reasonable minimum length for a significant pattern.
@@ -123,7 +134,6 @@ func normalizePatternValue(value interface{}, appName string) (*ParsedPattern, b
 	// 3. Enforce minimum length. This is a powerful heuristic.
 	// We use a regex to count user-visible characters, ignoring escapes and anchors.
 	// This is a bit naive but better than a simple len().
-	simpleCharCounter := regexp.MustCompile(`[a-zA-Z0-9]`)
 	if len(simpleCharCounter.FindAllString(trimmedCleanedRegex, -1)) < minPatternLength {
 		return nil, false
 	}
@@ -243,7 +253,6 @@ func cleanWappalyzerPatternAST(raw string) string {
 	// 2. Remove backreferences (Go doesn't support them) using a robust regex.
 	// Go's regexp/syntax does not define OpBackreference; it will fail to parse patterns with backreferences.
 	// We must strip them at the string level, but only true backreferences (e.g., \1, \2, ...), not escaped backslashes.
-	backrefRe := regexp.MustCompile(`\\([1-9][0-9]*)`)
 	raw = backrefRe.ReplaceAllStringFunc(raw, func(m string) string {
 		// fmt.Fprintf(os.Stderr, "[normalize] warning: removed unsupported backreference '%s' from pattern '%s'\n", m, raw)
 		return ""
@@ -264,8 +273,11 @@ func cleanWappalyzerPatternAST(raw string) string {
 		for i, sub := range r.Sub {
 			r.Sub[i] = transform(sub)
 		}
-		// Flatten capture groups to be non-capturing.
+		// Simplify the AST by unwrapping capture groups. A capture group node (OpCapture)
+		// is replaced by its contents. This effectively removes the capturing behavior
+		// and the parentheses, e.g., a pattern like `(foo)` becomes `foo`.
 		if r.Op == syntax.OpCapture && len(r.Sub) > 0 {
+			// By returning the sub-expression, we remove the OpCapture node from the tree.
 			return r.Sub[0]
 		}
 		return r
