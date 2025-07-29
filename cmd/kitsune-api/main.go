@@ -6,12 +6,19 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/kavinsood/kitsune/internal/profiler"
 )
 
 func main() {
 	fmt.Println("Starting Kitsune API server...")
+
+	// Get port from environment variable (for Render) or default to 8080
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	// Initialize the profiler
 	engine, err := profiler.New()
@@ -58,16 +65,16 @@ func main() {
 			Description string `json:"description"`
 			Website     string `json:"website"`
 		}
-		
+
 		type Response struct {
 			Technologies []Technology `json:"technologies"`
 		}
-		
+
 		// Populate the response
 		response := Response{
 			Technologies: make([]Technology, 0, len(results)),
 		}
-		
+
 		for tech, info := range results {
 			response.Technologies = append(response.Technologies, Technology{
 				Name:        tech,
@@ -75,7 +82,7 @@ func main() {
 				Website:     info.Website,
 			})
 		}
-		
+
 		// Set content type and marshal to JSON
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -85,6 +92,6 @@ func main() {
 	})
 
 	// Start the server
-	fmt.Println("Server running on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Printf("Server running on http://localhost:%s\n", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
