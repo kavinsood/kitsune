@@ -11,6 +11,10 @@ import (
 	"github.com/kavinsood/kitsune/internal/profiler"
 )
 
+type AnalyzeRequest struct {
+	URL string `json:"url"`
+}
+
 func main() {
 	fmt.Println("Starting Kitsune API server...")
 
@@ -41,7 +45,14 @@ func main() {
 			return
 		}
 
-		targetURL := r.FormValue("url")
+		var reqData AnalyzeRequest
+		// Decode the JSON body instead of using FormValue
+		if err := json.NewDecoder(r.Body).Decode(&reqData); err != nil {
+			http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+			return
+		}
+
+		targetURL := reqData.URL // Get URL from the decoded struct
 		if targetURL == "" {
 			http.Error(w, "URL parameter is required", http.StatusBadRequest)
 			return
