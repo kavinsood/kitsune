@@ -20,6 +20,9 @@ func main() {
 		port = "8080"
 	}
 
+	// Construct the listen address with "0.0.0.0" to accept external connections
+	listenAddr := "0.0.0.0:" + port
+
 	// Initialize the profiler
 	engine, err := profiler.New()
 	if err != nil {
@@ -27,6 +30,11 @@ func main() {
 	}
 
 	// Set up HTTP routes
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
 	http.HandleFunc("/analyze", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			http.Error(w, "Only POST method is allowed", http.StatusMethodNotAllowed)
@@ -91,7 +99,7 @@ func main() {
 		}
 	})
 
-	// Start the server
-	fmt.Printf("Server running on http://localhost:%s\n", port)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Start the server with the correct listen address
+	fmt.Printf("Server running on %s\n", listenAddr)
+	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
