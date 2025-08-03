@@ -4,6 +4,7 @@ cmd/kitsune-api/kitsune-api
 examples/pipeline_demo/pipeline_demo
 examples/simulate_network/simulate_network
 examples/cmd/kitsune-api
+main
 
 # General Go build artifacts
 *.exe

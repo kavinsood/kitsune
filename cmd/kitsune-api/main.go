@@ -7,12 +7,33 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 
 	"github.com/kavinsood/kitsune/internal/profiler"
 )
 
 type AnalyzeRequest struct {
 	URL string `json:"url"`
+}
+
+// Matches the frontend's Technology type
+type ResponseTechnology struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Website     string `json:"website"`
+}
+
+// A new struct for a category and its technologies
+type ResponseCategory struct {
+	Category     string               `json:"category"`
+	Technologies []ResponseTechnology `json:"technologies"`
+}
+
+// The final response payload
+type AnalyzeResponse struct {
+	URL          string               `json:"url"`
+	Technologies []ResponseTechnology `json:"technologies"` // A flat list for the "All" view
+	Categories   []ResponseCategory   `json:"categories"`   // The grouped list
 }
 
 func main() {
@@ -78,28 +99,48 @@ func main() {
 		// Perform fingerprinting with detailed info
 		results := engine.FingerprintWithInfoAndURL(resp.Header, body, targetURL)
 
-		// Create response struct
-		type Technology struct {
-			Name        string `json:"name"`
-			Description string `json:"description"`
-			Website     string `json:"website"`
-		}
+		// Data structures to build the response
+		allTechs := make([]ResponseTechnology, 0, len(results))
+		categoriesMap := make(map[string][]ResponseTechnology)
 
-		type Response struct {
-			Technologies []Technology `json:"technologies"`
-		}
-
-		// Populate the response
-		response := Response{
-			Technologies: make([]Technology, 0, len(results)),
-		}
-
-		for tech, info := range results {
-			response.Technologies = append(response.Technologies, Technology{
-				Name:        tech,
+		// Iterate once, build all structures
+		for techName, info := range results {
+			tech := ResponseTechnology{
+				Name:        techName,
 				Description: info.Description,
 				Website:     info.Website,
+			}
+			allTechs = append(allTechs, tech)
+
+			if len(info.Categories) > 0 {
+				for _, catName := range info.Categories {
+					categoriesMap[catName] = append(categoriesMap[catName], tech)
+				}
+			} else {
+				// Group tech without categories into a default one
+				categoriesMap["Miscellaneous"] = append(categoriesMap["Miscellaneous"], tech)
+			}
+		}
+
+		// Convert the map to the final slice for JSON serialization
+		categoryList := make([]ResponseCategory, 0, len(categoriesMap))
+		for catName, techs := range categoriesMap {
+			categoryList = append(categoryList, ResponseCategory{
+				Category:     catName,
+				Technologies: techs,
 			})
+		}
+
+		// Sort categories for deterministic output
+		sort.Slice(categoryList, func(i, j int) bool {
+			return categoryList[i].Category < categoryList[j].Category
+		})
+
+		// Build the final response object
+		response := AnalyzeResponse{
+			URL:          targetURL,
+			Technologies: allTechs,
+			Categories:   categoryList,
 		}
 
 		// Set content type and marshal to JSON

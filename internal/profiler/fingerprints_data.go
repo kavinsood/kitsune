@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"strconv"
 	"sync"
-	
+
 	"github.com/kavinsood/kitsune/assets"
 )
 
 var (
 	// Data now comes from assets package
-	fingerprints string
-	cateogriesData string
+	fingerprints   string
+	categoriesData string
 
 	syncOnce          sync.Once
 	categoriesMapping map[int]categoryItem
@@ -21,23 +21,37 @@ var (
 func init() {
 	// Load data from assets package
 	fingerprints = assets.FingerprintsJSON
-	cateogriesData = assets.CategoriesJSON
-	
+	categoriesData = assets.CategoriesJSON
+
 	// Lazy initialize categories mapping
 	syncOnce.Do(func() {
-		var data map[int]map[string]string
-		err := json.Unmarshal([]byte(cateogriesData), &data)
+		var data map[string]map[string]interface{}
+		err := json.Unmarshal([]byte(categoriesData), &data)
 		if err != nil {
 			// handle error silently
 			return
 		}
 
 		categoriesMapping = make(map[int]categoryItem)
-		for categoryID, category := range data {
-			priorityInt, _ := strconv.Atoi(category["priority"])
+		for categoryIDStr, category := range data {
+			categoryID, err := strconv.Atoi(categoryIDStr)
+			if err != nil {
+				continue
+			}
+
+			name, ok := category["name"].(string)
+			if !ok {
+				continue
+			}
+
+			priority := 0
+			if priorityVal, ok := category["priority"].(float64); ok {
+				priority = int(priorityVal)
+			}
+
 			categoriesMapping[categoryID] = categoryItem{
-				Name:     category["name"],
-				Priority: priorityInt,
+				Name:     name,
+				Priority: priority,
 			}
 		}
 	})
