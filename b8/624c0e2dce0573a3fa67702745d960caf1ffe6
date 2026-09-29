@@ -1,0 +1,39 @@
+.gitignore
+  s_021e4fa21d7c47::t_16afbc0925a2c0 44-47
+cmd/kitsune-worker/main.go
+  s_021e4fa21d7c47::t_80c30052f22c59 1-69
+cmd/kitsune-worker/.gitignore
+  s_021e4fa21d7c47::t_2d74f53feb9b4f 1-3
+cmd/kitsune-worker/build.sh
+  s_021e4fa21d7c47::t_fe4c95ebed381a 1-10
+cmd/kitsune-worker/egress.go
+  s_021e4fa21d7c47::t_493e8c17e12579 1-76
+cmd/kitsune-worker/package-lock.json
+  s_021e4fa21d7c47::t_cfdc78619fe774 1-1590
+cmd/kitsune-worker/package.json
+  s_021e4fa21d7c47::t_361724ad2d488d 1-12
+cmd/kitsune-worker/tail/index.mjs
+  s_021e4fa21d7c47::t_406d3cf276989b 1-59
+cmd/kitsune-worker/tail/wrangler.jsonc
+  s_021e4fa21d7c47::t_05b8c64743674e 1-6
+cmd/kitsune-worker/worker.mjs
+  s_021e4fa21d7c47::t_0cbe52ee971627 1-66
+cmd/kitsune-worker/wrangler.jsonc
+  s_021e4fa21d7c47::t_0bc6b7f85ab8e3 1-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b8624c0e2dce0573a3fa67702745d960caf1ffe6",
+  "prompts": {},
+  "sessions": {
+    "s_021e4fa21d7c47": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9e9ab97efd1cc99a",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
