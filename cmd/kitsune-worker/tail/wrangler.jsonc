@@ -1,0 +1,6 @@
+{
+  "name": "kitsune-wasm-tail",
+  "main": "./index.mjs",
+  "compatibility_date": "2026-09-01",
+  "kv_namespaces": [{ "binding": "EVENTS", "id": "0f08db0254144c778d04d9697b6b1699" }]
+}

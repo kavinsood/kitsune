@@ -1,0 +1,9 @@
+{
+  "name": "kitsune-wasm",
+  "main": "./build/worker.mjs",
+  "compatibility_date": "2026-09-01",
+  "build": { "command": "./build.sh" },
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "limits": { "cpu_ms": 30000 },
+  "tail_consumers": [{ "service": "kitsune-wasm-tail" }]
+}
