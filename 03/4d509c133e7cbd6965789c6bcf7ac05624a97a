@@ -1,0 +1,45 @@
+go.mod
+  s_66556278413749::t_d4ca85a33937d7 7,10
+internal/profiler/asset_fetcher.go
+  s_66556278413749::t_fd8146f7fd4caf 161,168,182,189,199-231
+internal/profiler/corpus_bench_test.go
+  s_66556278413749::t_0de98072473cf5 1-333
+internal/profiler/fingerprint_dns_doh.go
+  s_66556278413749::t_66fa31f2065394 1-77
+internal/profiler/fingerprint_dns_udp.go
+  s_66556278413749::t_dfaf0d1947ed37 1-70
+internal/profiler/fingerprint_dom.go
+  s_66556278413749::t_a15cc7f8ddc7a2 6,8-9,12-88,100-110,119-126
+internal/profiler/fingerprints.go
+  s_66556278413749::t_49fcd028650b1c 45-57,243,260,297,307,317,324-360,378-389,397-399,410-412,423-425,436-438,449-451,463-465
+internal/profiler/javascript.go
+  s_66556278413749::t_665c73d6c3d426 29,32,35,50,57,59,62-63,66,69,72-75,78-84,87-88,91-92,95-96,99-100,103-104,107-108,112-122,133-140,204-205,209,218,226-298,301-309,318-323,325-328,338,354,356,360-364,380-383,389,391,397-402
+internal/profiler/patterns.go
+  s_66556278413749::t_b62ffc7257125c 4,16-18,35-39,60-63,98-113,122-129
+internal/profiler/pipeline.go
+  s_66556278413749::t_a2df3e72837a60 14-67,273,291-297,299-304
+internal/profiler/prefilter.go
+  s_66556278413749::t_9dba0ca8aedd16 1-695
+internal/profiler/prefilter_test.go
+  s_66556278413749::t_90a6f507565f06 1-318
+internal/profiler/profiler.go
+  s_66556278413749::t_600b3a943a4533 152,203,449,455
+go.sum
+  s_66556278413749::t_d492734aca013e 28-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "034d509c133e7cbd6965789c6bcf7ac05624a97a",
+  "prompts": {},
+  "sessions": {
+    "s_66556278413749": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a278ae397c0973bc8",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
