@@ -42,6 +42,19 @@ type CompiledFingerprints struct {
 	// domPatternsByTag provides a quick lookup map for DOM patterns by HTML tag name
 	// organized as <tag_name, map<app_name, selectors>>
 	domPatternsByTag map[string]map[string][]string
+
+	// literalMatchers finds the prefilter literals of every pattern of a
+	// part in one pass over large inputs. See buildLiteralMatchers.
+	literalMatchers map[part]*literalMatcher
+
+	// jsGlobals contains the JS global names used by any fingerprint's js
+	// patterns. See buildIndexes.
+	jsGlobals map[string]struct{}
+
+	// domSelectors holds the compiled form of every dom selector, and
+	// domLiterals finds their literals. See buildDOMSelectors.
+	domSelectors map[string]*domSelector
+	domLiterals  *literalMatcher
 }
 
 // CompiledFingerprint contains the compiled fingerprints from the tech json
@@ -227,6 +240,7 @@ func compileFingerprint(fingerprint *Fingerprint) *CompiledFingerprint {
 		if err != nil {
 			continue
 		}
+		fingerprint.initPrefilter()
 		compiled.html = append(compiled.html, fingerprint)
 	}
 
@@ -243,6 +257,7 @@ func compileFingerprint(fingerprint *Fingerprint) *CompiledFingerprint {
 		if err != nil {
 			continue
 		}
+		fingerprint.initPrefilter()
 		compiled.scriptSrc = append(compiled.scriptSrc, fingerprint)
 	}
 
@@ -279,6 +294,7 @@ func compileFingerprint(fingerprint *Fingerprint) *CompiledFingerprint {
 		if err != nil {
 			continue
 		}
+		fingerprint.initPrefilter()
 		compiled.robots = append(compiled.robots, fingerprint)
 	}
 	
@@ -288,6 +304,7 @@ func compileFingerprint(fingerprint *Fingerprint) *CompiledFingerprint {
 		if err != nil {
 			continue
 		}
+		fingerprint.initPrefilter()
 		compiled.certIssuer = append(compiled.certIssuer, fingerprint)
 	}
 	
@@ -297,10 +314,48 @@ func compileFingerprint(fingerprint *Fingerprint) *CompiledFingerprint {
 		if err != nil {
 			continue
 		}
+		fingerprint.initPrefilter()
 		compiled.css = append(compiled.css, fingerprint)
 	}
 
 	return compiled
+}
+
+// buildLiteralMatchers indexes the prefilter literals of the parts that are
+// matched against large inputs.
+func (f *CompiledFingerprints) buildLiteralMatchers() {
+	f.literalMatchers = make(map[part]*literalMatcher)
+	parts := map[part]func(*CompiledFingerprint) []*ParsedPattern{
+		htmlPart:   func(fp *CompiledFingerprint) []*ParsedPattern { return fp.html },
+		cssPart:    func(fp *CompiledFingerprint) []*ParsedPattern { return fp.css },
+		robotsPart: func(fp *CompiledFingerprint) []*ParsedPattern { return fp.robots },
+	}
+	for part, patternsOf := range parts {
+		var lits []string
+		for _, fp := range f.Apps {
+			for _, pattern := range patternsOf(fp) {
+				for _, set := range pattern.literals {
+					lits = append(lits, set...)
+				}
+			}
+		}
+		if m := newLiteralMatcher(lits); m != nil {
+			f.literalMatchers[part] = m
+		}
+	}
+}
+
+// buildIndexes builds the lookup structures derived from Apps. It must be
+// called once all fingerprints have been added.
+func (f *CompiledFingerprints) buildIndexes() {
+	f.buildLiteralMatchers()
+	f.buildDOMSelectors()
+	f.jsGlobals = make(map[string]struct{})
+	for _, fp := range f.Apps {
+		for name := range fp.js {
+			f.jsGlobals[name] = struct{}{}
+		}
+	}
 }
 
 // matchString matches a string for the fingerprints
@@ -320,6 +375,18 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 	var matched bool
 	var technologies []matchPartResult
 
+	// Lowercase once so each pattern's literal prefilter can rule the input
+	// out without running the regex. ToLower doesn't allocate if data is
+	// already lowercase, as the HTML body is.
+	var has func(lit string) bool
+	if lowered := strings.ToLower(data); !strings.Contains(lowered, foldHazard) {
+		if m := f.literalMatchers[part]; m != nil && len(lowered) >= minScanLen {
+			has = m.scan(lowered)
+		} else {
+			has = func(lit string) bool { return strings.Contains(lowered, lit) }
+		}
+	}
+
 	for app, fingerprint := range f.Apps {
 		var version string
 		confidence := 100
@@ -327,6 +394,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 		switch part {
 		case jsPart:
 			for _, pattern := range fingerprint.js {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {
@@ -337,6 +407,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 			}
 		case scriptPart:
 			for _, pattern := range fingerprint.scriptSrc {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {
@@ -347,6 +420,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 			}
 		case htmlPart:
 			for _, pattern := range fingerprint.html {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {
@@ -357,6 +433,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 			}
 		case robotsPart:
 			for _, pattern := range fingerprint.robots {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {
@@ -367,6 +446,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 			}
 		case certIssuerPart:
 			for _, pattern := range fingerprint.certIssuer {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {
@@ -378,6 +460,9 @@ func (f *CompiledFingerprints) matchString(data string, part part, timeout time.
 		case cssPart:
 			// Use dedicated CSS patterns
 			for _, pattern := range fingerprint.css {
+				if has != nil && !pattern.mayMatch(has) {
+					continue
+				}
 				if valid, versionString := pattern.Evaluate(data, s.wappalyze.regexTimeout); valid {
 					matched = true
 					if version == "" && versionString != "" {

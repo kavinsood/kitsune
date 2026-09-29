@@ -3,9 +3,88 @@ package profiler
 import (
 	"bytes"
 	"strings"
-	
+
 	"github.com/PuerkitoBio/goquery"
+	"github.com/andybalholm/cascadia"
+	"golang.org/x/net/html"
 )
+
+// domSelector is a dom selector compiled once, instead of on every
+// doc.Find call.
+type domSelector struct {
+	matcher  goquery.Matcher // nil if the selector is invalid
+	literals [][]string      // see selectorLiterals
+}
+
+// maxDOMLiteral bounds the length of the selector literals indexed. A prefix
+// of a literal is present whenever the literal is, so truncating is safe; it
+// filters nearly as well and makes the literal matcher much smaller.
+const maxDOMLiteral = 12
+
+// buildDOMSelectors compiles every dom selector and indexes their literals.
+func (f *CompiledFingerprints) buildDOMSelectors() {
+	f.domSelectors = make(map[string]*domSelector)
+	var lits []string
+	for _, fp := range f.Apps {
+		for selector := range fp.dom {
+			if _, ok := f.domSelectors[selector]; ok {
+				continue
+			}
+			sel := &domSelector{literals: selectorLiterals(selector)}
+			for _, part := range sel.literals {
+				for i, lit := range part {
+					if len(lit) > maxDOMLiteral {
+						part[i] = lit[:maxDOMLiteral]
+					}
+				}
+			}
+			// Like goquery's Find, treat invalid selectors as matching nothing.
+			if m, err := cascadia.Compile(selector); err == nil {
+				sel.matcher = m
+			}
+			f.domSelectors[selector] = sel
+			for _, part := range sel.literals {
+				lits = append(lits, part...)
+			}
+		}
+	}
+	if f.domLiterals = newLiteralMatcher(lits); f.domLiterals != nil {
+		f.domLiterals.foldCase()
+	}
+}
+
+// mayMatch reports whether, according to has, some element may match sel.
+func (sel *domSelector) mayMatch(has func(lit string) bool) bool {
+	if sel.literals == nil {
+		return true
+	}
+	for _, part := range sel.literals {
+		all := true
+		for _, lit := range part {
+			if !has(lit) {
+				all = false
+				break
+			}
+		}
+		if all {
+			return true
+		}
+	}
+	return false
+}
+
+// addAttributeValues records the literals in the attribute values of n and
+// its descendants.
+func addAttributeValues(p *literalPresence, n *html.Node) {
+	if n.Type == html.ElementNode {
+		for _, attr := range n.Attr {
+			p.add(attr.Val)
+		}
+	}
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		addAttributeValues(p, c)
+	}
+}
 
 // analyzeDOM checks for DOM patterns in the HTML using goquery selectors
 // and returns detected technologies
@@ -18,6 +97,17 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 		return technologies
 	}
 
+	// Find which selector literals occur in the document's attribute values,
+	// so selectors that can't match needn't be run.
+	has := func(lit string) bool { return true }
+	if s.fingerprints.domLiterals != nil {
+		p := s.fingerprints.domLiterals.presence()
+		for _, n := range doc.Nodes {
+			addAttributeValues(p, n)
+		}
+		has = p.has
+	}
+
 	for appName, fingerprint := range s.fingerprints.Apps {
 		// Skip if no DOM patterns for this app
 		if len(fingerprint.dom) == 0 {
@@ -26,7 +116,14 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 
 		for selector, checks := range fingerprint.dom {
 			// Use goquery to find all elements matching the selector
-			elements := doc.Find(selector)
+			var elements *goquery.Selection
+			if sel := s.fingerprints.domSelectors[selector]; sel == nil {
+				elements = doc.Find(selector)
+			} else if sel.matcher == nil || !sel.mayMatch(has) {
+				continue
+			} else {
+				elements = doc.FindMatcher(sel.matcher)
+			}
 			
 			// If no elements found, continue to next selector
 			if elements.Length() == 0 {

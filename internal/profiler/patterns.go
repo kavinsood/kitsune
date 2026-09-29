@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"os"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -12,6 +13,9 @@ import (
 // additional metadata for confidence and version extraction.
 type ParsedPattern struct {
 	regex *regexp.Regexp
+	// literals are lowercase literals required by regex: it can only match
+	// a target if strings.ToLower(target) contains them. See prefilter.go.
+	literals literalSets
 
 	Confidence int
 	Version    string
@@ -27,6 +31,11 @@ const (
 	verCap2Fill    = "__verCap2__"
 	verCap2Limited = `((?:\d{1,20}\.){1,20}\d{1,20})`
 )
+
+// unboundedRepeats disables the {1,250}/{0,250} rewrite. Go's RE2 engine is
+// linear-time, so the rewrite buys no ReDoS protection but multiplies the size
+// of compiled programs (~50MB of heap across all fingerprints).
+var unboundedRepeats = os.Getenv("KITSUNE_BOUNDED_REPEATS") == ""
 
 // ParsePattern extracts information from a pattern, supporting both regex and simple patterns
 func ParsePattern(pattern string) (*ParsedPattern, error) {
@@ -48,8 +57,10 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 			regexPattern = strings.ReplaceAll(regexPattern, verCap2, verCap2Fill)
 
 			regexPattern = strings.ReplaceAll(regexPattern, "\\+", "__escapedPlus__")
-			regexPattern = strings.ReplaceAll(regexPattern, "+", "{1,250}")
-			regexPattern = strings.ReplaceAll(regexPattern, "*", "{0,250}")
+			if !unboundedRepeats {
+				regexPattern = strings.ReplaceAll(regexPattern, "+", "{1,250}")
+				regexPattern = strings.ReplaceAll(regexPattern, "*", "{0,250}")
+			}
 			regexPattern = strings.ReplaceAll(regexPattern, "__escapedPlus__", "\\+")
 
 			// restore version capture groups
@@ -84,6 +95,22 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 	return p, nil
 }
 
+// initPrefilter derives the literal prefilter for p. It is only worth doing
+// for patterns that are evaluated against large inputs.
+func (p *ParsedPattern) initPrefilter() {
+	if p.regex != nil {
+		p.literals = requiredLiterals(p.regex.String(), true)
+	}
+}
+
+// mayMatch reports whether p could match a target, given has reporting
+// whether a literal occurs in the lowercased target. A false result means
+// Evaluate would certainly fail. Callers must not use the prefilter if the
+// lowercased target contains foldHazard.
+func (p *ParsedPattern) mayMatch(has func(lit string) bool) bool {
+	return p.literals.satisfied(has)
+}
+
 func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, string) {
 	if p.SkipRegex {
 		return true, ""
@@ -92,8 +119,14 @@ func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, st
 		return false, ""
 	}
 
-	// Replace the direct regex call with our timeout-protected version
-	submatches := matchWithTimeout(p.regex, []byte(target), timeout)
+	var submatches []string
+	if unboundedRepeats {
+		// RE2 is linear-time; matching directly avoids a goroutine, a timer and
+		// two copies of target per pattern.
+		submatches = p.regex.FindStringSubmatch(target)
+	} else {
+		submatches = matchWithTimeout(p.regex, []byte(target), timeout)
+	}
 	if len(submatches) == 0 {
 		return false, ""
 	}

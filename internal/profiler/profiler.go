@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -150,6 +149,7 @@ func (s *Wappalyze) loadFingerprints() error {
 			s.fingerprints.registerDOMPattern(appName, domSelector)
 		}
 	}
+	s.fingerprints.buildIndexes()
 	return nil
 }
 
@@ -200,6 +200,7 @@ func (s *Wappalyze) loadFingerprintsFromFile(filePath string, loadEmbedded, supe
 			s.fingerprints.registerDOMPattern(appName, domSelector)
 		}
 	}
+	s.fingerprints.buildIndexes()
 
 	return nil
 }
@@ -445,13 +446,13 @@ func (s *Wappalyze) fetchAndAnalyzeRobotsTxt(robotsURL string, ctx context.Conte
 	}
 
 	// Read robots.txt content
-	robotsContent, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1MB limit
+	robotsContent, err := readString(resp, 1024*1024) // 1MB limit
 	if err != nil {
 		return nil
 	}
 
 	// Match robots.txt patterns against content with timeout
-	return s.fingerprints.matchString(string(robotsContent), robotsPart, s.regexTimeout)
+	return s.fingerprints.matchString(robotsContent, robotsPart, s.regexTimeout)
 }
 
 // FingerprintWithCats identifies technologies on a target,

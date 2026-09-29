@@ -158,14 +158,14 @@ func (af *AssetFetcher) handleScriptResponse(resp *http.Response, originalURL st
 	}
 
 	// Read the content with a limit to avoid huge files
-	content, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1MB limit
+	content, err := readString(resp, 1024*1024) // 1MB limit
 	if err != nil {
 		return
 	}
 
 	// Store the result
 	af.mutex.Lock()
-	(*af.jsContent)[originalURL] = string(content)
+	(*af.jsContent)[originalURL] = content
 	af.mutex.Unlock()
 }
 
@@ -179,14 +179,14 @@ func (af *AssetFetcher) handleStyleResponse(resp *http.Response, originalURL str
 	}
 
 	// Read the content with a limit to avoid huge files
-	content, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // 1MB limit
+	content, err := readString(resp, 1024*1024) // 1MB limit
 	if err != nil {
 		return
 	}
 
 	// Store the result
 	af.mutex.Lock()
-	(*af.cssContent)[originalURL] = string(content)
+	(*af.cssContent)[originalURL] = content
 	af.mutex.Unlock()
 }
 
@@ -195,4 +195,37 @@ func (af *AssetFetcher) SetDNSRecords(records map[string][]string) {
 	af.mutex.Lock()
 	defer af.mutex.Unlock()
 	af.dnsRecords = records
+}
+
+// readString reads at most limit bytes of resp's body into a string. Like
+// io.ReadAll it reads into growing chunks and then assembles an exactly-sized
+// result, but it builds the string directly, so the body isn't copied a
+// second time by string(...).
+func readString(resp *http.Response, limit int64) (string, error) {
+	r := io.LimitReader(resp.Body, limit)
+	next := int64(512)
+	if resp.ContentLength > 0 {
+		next = min(resp.ContentLength+1, limit+1) // +1 to see EOF in one read
+	}
+	var chunks [][]byte
+	size := 0
+	for {
+		chunk := make([]byte, next)
+		n, err := io.ReadFull(r, chunk)
+		chunks = append(chunks, chunk[:n])
+		size += n
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		next += next / 2
+	}
+	var sb strings.Builder
+	sb.Grow(size)
+	for _, chunk := range chunks {
+		sb.Write(chunk)
+	}
+	return sb.String(), nil
 }

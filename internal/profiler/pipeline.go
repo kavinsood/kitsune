@@ -11,6 +11,60 @@ import (
 	"time"
 )
 
+// pathBasedTechnologies maps technologies to JS property path prefixes that
+// identify them.
+var pathBasedTechnologies = map[string][]string{
+	"AngularJS": {"angular.version", "angular.module", "angular.bootstrap", "ng.module", "ng.directive"},
+	"Angular":   {"ng.platformBrowserDynamic", "ng.core", "@angular"},
+	"jQuery":    {"jQuery.fn.jquery", "jQuery.version", "$.fn.jquery"},
+	"React":     {"React.version", "React.createElement", "React.Component", "ReactDOM"},
+	"Vue.js":    {"Vue.version", "Vue.component", "Vue.directive"},
+}
+
+// frameworkDetection maps frameworks to JS global names that identify them.
+var frameworkDetection = map[string][]string{
+	"React":   {"createElement", "Component", "Fragment", "useEffect", "useState"},
+	"Vue.js":  {"createApp", "nextTick", "reactive", "computed", "ref"},
+	"Angular": {"NgModule", "Component", "Injectable", "Input", "Output"},
+}
+
+// frameworkGlobals is the set of all frameworkDetection names.
+var frameworkGlobals = func() map[string]struct{} {
+	names := make(map[string]struct{})
+	for _, keywords := range frameworkDetection {
+		for _, keyword := range keywords {
+			names[keyword] = struct{}{}
+		}
+	}
+	return names
+}()
+
+// usefulJSAccess reports whether recording the JS property access path can
+// affect detection: the path, its root or one of its partial paths is a JS
+// global used by a fingerprint or by frameworkDetection, or it has one of the
+// pathBasedTechnologies prefixes. Other accesses are dropped to save memory.
+func (s *Wappalyze) usefulJSAccess(path string) bool {
+	for i := 0; i <= len(path); i++ {
+		if i < len(path) && path[i] != '.' {
+			continue
+		}
+		if _, ok := frameworkGlobals[path[:i]]; ok {
+			return true
+		}
+		if _, ok := s.fingerprints.jsGlobals[path[:i]]; ok {
+			return true
+		}
+	}
+	for _, prefixes := range pathBasedTechnologies {
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(path, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // AnalyzeWithPipeline is an exported version of analyzeWithPipeline for benchmarking
 // It returns the full richResult containing all detection information
 func (s *Wappalyze) AnalyzeWithPipeline(resp *http.Response, body []byte) richResult {
@@ -216,7 +270,7 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 
 		// Process each script file
 		for scriptURL, content := range jsContent {
-			result := ExtractJSGlobals(content)
+			result := extractJSGlobals(content, s.usefulJSAccess)
 
 			// Merge high confidence variables
 			for name, value := range result.HighConfidence {
@@ -234,17 +288,20 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 			for path, value := range result.PropertyPaths {
 				propertyPaths[path] = value
 
-				// Extract root and intermediate paths
-				parts := strings.Split(path, ".")
-				if len(parts) > 0 {
-					root := parts[0]
-					mergedJSGlobals[root] = path
+				// Extract root and intermediate paths (substrings, so no
+				// allocation per path)
+				dot := strings.IndexByte(path, '.')
+				if dot < 0 {
+					dot = len(path)
+				}
+				mergedJSGlobals[path[:dot]] = path
 
-					for i := 1; i < len(parts); i++ {
-						partialPath := strings.Join(parts[:i+1], ".")
-						if _, exists := mergedJSGlobals[partialPath]; !exists {
-							mergedJSGlobals[partialPath] = value
-						}
+				for i := dot + 1; i <= len(path); i++ {
+					if i < len(path) && path[i] != '.' {
+						continue
+					}
+					if _, exists := mergedJSGlobals[path[:i]]; !exists {
+						mergedJSGlobals[path[:i]] = value
 					}
 				}
 			}
@@ -269,14 +326,6 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 		}
 
 		// Process property paths for framework detection
-		pathBasedTechnologies := map[string][]string{
-			"AngularJS": {"angular.version", "angular.module", "angular.bootstrap", "ng.module", "ng.directive"},
-			"Angular":   {"ng.platformBrowserDynamic", "ng.core", "@angular"},
-			"jQuery":    {"jQuery.fn.jquery", "jQuery.version", "$.fn.jquery"},
-			"React":     {"React.version", "React.createElement", "React.Component", "ReactDOM"},
-			"Vue.js":    {"Vue.version", "Vue.component", "Vue.directive"},
-		}
-
 		for path, value := range propertyPaths {
 			for tech, patterns := range pathBasedTechnologies {
 				for _, pattern := range patterns {
@@ -295,12 +344,6 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 		}
 
 		// Check for frameworks based on global variables
-		frameworkDetection := map[string][]string{
-			"React":   {"createElement", "Component", "Fragment", "useEffect", "useState"},
-			"Vue.js":  {"createApp", "nextTick", "reactive", "computed", "ref"},
-			"Angular": {"NgModule", "Component", "Injectable", "Input", "Output"},
-		}
-
 		for framework, keywords := range frameworkDetection {
 			for _, keyword := range keywords {
 				if _, exists := mergedJSGlobals[keyword]; exists {
