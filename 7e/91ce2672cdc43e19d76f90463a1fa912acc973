@@ -1,0 +1,21 @@
+cmd/kitsune-api/main.go
+  s_b2fab5feb1943a::t_17ed0146d88ad4 9,33
+internal/api/api.go
+  s_b2fab5feb1943a::t_4da2eb9238a388 1-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "7e91ce2672cdc43e19d76f90463a1fa912acc973",
+  "prompts": {},
+  "sessions": {
+    "s_b2fab5feb1943a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6c6f39f-98c8-42f4-8b32-5d8d5152d0ff",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
