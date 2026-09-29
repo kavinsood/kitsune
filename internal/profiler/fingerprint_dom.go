@@ -3,17 +3,21 @@ package profiler
 import (
 	"bytes"
 	"strings"
+	"sync"
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/andybalholm/cascadia"
 	"golang.org/x/net/html"
 )
 
-// domSelector is a dom selector compiled once, instead of on every
+// domSelector is a dom selector, compiled on first use instead of on every
 // doc.Find call.
 type domSelector struct {
-	matcher  goquery.Matcher // nil if the selector is invalid
-	literals [][]string      // see selectorLiterals
+	selector string
+	literals [][]string // see selectorLiterals and newDOMSelector
+
+	once    sync.Once
+	matcher goquery.Matcher // nil if the selector is invalid
 }
 
 // maxDOMLiteral bounds the length of the selector literals indexed. A prefix
@@ -21,36 +25,29 @@ type domSelector struct {
 // filters nearly as well and makes the literal matcher much smaller.
 const maxDOMLiteral = 12
 
-// buildDOMSelectors compiles every dom selector and indexes their literals.
-func (f *CompiledFingerprints) buildDOMSelectors() {
-	f.domSelectors = make(map[string]*domSelector)
-	var lits []string
-	for _, fp := range f.Apps {
-		for selector := range fp.dom {
-			if _, ok := f.domSelectors[selector]; ok {
-				continue
-			}
-			sel := &domSelector{literals: selectorLiterals(selector)}
-			for _, part := range sel.literals {
-				for i, lit := range part {
-					if len(lit) > maxDOMLiteral {
-						part[i] = lit[:maxDOMLiteral]
-					}
-				}
-			}
-			// Like goquery's Find, treat invalid selectors as matching nothing.
-			if m, err := cascadia.Compile(selector); err == nil {
-				sel.matcher = m
-			}
-			f.domSelectors[selector] = sel
-			for _, part := range sel.literals {
-				lits = append(lits, part...)
+// newDOMSelector returns selector with its literals.
+func newDOMSelector(selector string) *domSelector {
+	sel := &domSelector{selector: selector, literals: selectorLiterals(selector)}
+	for _, part := range sel.literals {
+		for i, lit := range part {
+			if len(lit) > maxDOMLiteral {
+				part[i] = lit[:maxDOMLiteral]
 			}
 		}
 	}
-	if f.domLiterals = newLiteralMatcher(lits); f.domLiterals != nil {
-		f.domLiterals.foldCase()
-	}
+	return sel
+}
+
+// compiled returns the compiled selector, or nil if it is invalid. It is
+// safe for concurrent use.
+func (sel *domSelector) compiled() goquery.Matcher {
+	sel.once.Do(func() {
+		// Like goquery's Find, treat invalid selectors as matching nothing.
+		if m, err := cascadia.Compile(sel.selector); err == nil {
+			sel.matcher = m
+		}
+	})
+	return sel.matcher
 }
 
 // mayMatch reports whether, according to has, some element may match sel.
@@ -100,45 +97,39 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 	// Find which selector literals occur in the document's attribute values,
 	// so selectors that can't match needn't be run.
 	has := func(lit string) bool { return true }
-	if s.fingerprints.domLiterals != nil {
-		p := s.fingerprints.domLiterals.presence()
+	if m := s.fingerprints.domLiteralMatcher(); m != nil {
+		p := m.presence()
 		for _, n := range doc.Nodes {
 			addAttributeValues(p, n)
 		}
 		has = p.has
 	}
 
-	for appName, fingerprint := range s.fingerprints.Apps {
-		// Skip if no DOM patterns for this app
-		if len(fingerprint.dom) == 0 {
-			continue
-		}
-
-		for selector, checks := range fingerprint.dom {
-			// Use goquery to find all elements matching the selector
-			var elements *goquery.Selection
-			if sel := s.fingerprints.domSelectors[selector]; sel == nil {
-				elements = doc.Find(selector)
-			} else if sel.matcher == nil || !sel.mayMatch(has) {
+	for _, fingerprint := range s.fingerprints.Apps {
+		for _, rule := range fingerprint.dom {
+			if !rule.sel.mayMatch(has) {
 				continue
-			} else {
-				elements = doc.FindMatcher(sel.matcher)
 			}
-			
+			matcher := rule.sel.compiled()
+			if matcher == nil {
+				continue
+			}
+			// Use goquery to find all elements matching the selector
+			elements := doc.FindMatcher(matcher)
+
 			// If no elements found, continue to next selector
 			if elements.Length() == 0 {
 				continue
 			}
-			
+
 			// Check if any element matches all the pattern checks
 			elements.EachWithBreak(func(i int, selection *goquery.Selection) bool {
 				// Once an element is found, perform all checks defined for it
-				allChecksPassed := true
-
-				for checkType, pattern := range checks {
+				for _, check := range rule.checks {
 					checkPassed := false
-					
-					switch checkType {
+					pattern := check.pattern
+
+					switch check.name {
 					case "exists", "main":
 						// The selector found an element, so this check passes by default
 						checkPassed = true
@@ -152,7 +143,7 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 					default:
 						// Attribute checks (like href, src, class, etc.)
 						if pattern != nil {
-							if attrVal, exists := selection.Attr(checkType); exists {
+							if attrVal, exists := selection.Attr(check.name); exists {
 								if matched, _ := pattern.Evaluate(attrVal, s.regexTimeout); matched {
 									checkPassed = true
 								}
@@ -161,33 +152,29 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 					}
 
 					if !checkPassed {
-						allChecksPassed = false
 						return true // Continue to next element
 					}
 				}
 
-				if allChecksPassed {
-					// All checks for this selector passed
+				// All checks for this selector passed
+				technologies = append(technologies, matchPartResult{
+					application: fingerprint.name,
+					confidence:  100,
+				})
+
+				// Add implied technologies
+				for _, implied := range fingerprint.implies {
 					technologies = append(technologies, matchPartResult{
-						application: appName,
+						application: implied,
 						confidence:  100,
 					})
-					
-					// Add implied technologies
-					for _, implied := range fingerprint.implies {
-						technologies = append(technologies, matchPartResult{
-							application: implied,
-							confidence:  100,
-						})
-					}
-					
-					return false // Break the .EachWithBreak loop
 				}
-				return true // Continue to the next element matching the selector
+
+				return false // Break the .EachWithBreak loop
 			})
 		}
 	}
-	
+
 	return technologies
 }
 

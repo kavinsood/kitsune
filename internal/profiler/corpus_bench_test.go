@@ -299,7 +299,7 @@ func TestCorpusJSAccessFilter(t *testing.T) {
 	}
 	observable := func(name string) bool {
 		_, fw := frameworkGlobals[name]
-		_, fp := engine.fingerprints.jsGlobals[name]
+		fp := engine.fingerprints.hasJSGlobal(name)
 		return fw || fp
 	}
 	for _, s := range sites {

@@ -51,7 +51,7 @@ func (s *Wappalyze) usefulJSAccess(path string) bool {
 		if _, ok := frameworkGlobals[path[:i]]; ok {
 			return true
 		}
-		if _, ok := s.fingerprints.jsGlobals[path[:i]]; ok {
+		if s.fingerprints.hasJSGlobal(path[:i]) {
 			return true
 		}
 	}
@@ -385,14 +385,14 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 	// Populate application info
 	result.appInfo = make(map[string]AppInfo, len(result.technologies))
 	for app := range result.technologies {
-		if fingerprint, ok := s.fingerprints.Apps[app]; ok {
+		if fingerprint := s.fingerprints.lookup(app); fingerprint != nil {
 			result.appInfo[app] = AppInfoFromFingerprint(fingerprint)
 		}
 
 		// Handle colon separated values
 		if strings.Contains(app, versionSeparator) {
 			if parts := strings.Split(app, versionSeparator); len(parts) == 2 {
-				if fingerprint, ok := s.fingerprints.Apps[parts[0]]; ok {
+				if fingerprint := s.fingerprints.lookup(parts[0]); fingerprint != nil {
 					result.appInfo[app] = AppInfoFromFingerprint(fingerprint)
 				}
 			}
@@ -402,7 +402,7 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 	// Populate category info
 	result.categoryInfo = make(map[string]CatsInfo, len(result.technologies))
 	for app := range result.technologies {
-		if fingerprint, ok := s.fingerprints.Apps[app]; ok {
+		if fingerprint := s.fingerprints.lookup(app); fingerprint != nil {
 			result.categoryInfo[app] = CatsInfo{
 				Cats: fingerprint.cats,
 			}

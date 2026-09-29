@@ -35,10 +35,12 @@ func checkBodyUnoptimized(s *Wappalyze, body []byte) ([]matchPartResult, []strin
 			token := tokenizer.Token()
 			
 			// Process any DOM patterns that match this tag
-			for app, fingerprint := range s.fingerprints.Apps {
+			for _, fingerprint := range s.fingerprints.Apps {
+				app := fingerprint.name
 				domPatternMatched := false
-				
-				for domSelector := range fingerprint.dom {
+
+				for _, rule := range fingerprint.dom {
+					domSelector := rule.sel.selector
 					// Parse the DOM selector (very simplified approach)
 					// Format: element[attribute*='value']
 					

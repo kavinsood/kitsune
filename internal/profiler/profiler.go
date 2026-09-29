@@ -11,6 +11,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/kavinsood/kitsune/assets"
 )
 
 // richResult contains all possible outputs from technology detection
@@ -28,7 +30,11 @@ func (r richResult) GetTechnologies() map[string]struct{} {
 
 // Wappalyze is a client for working with tech detection
 type Wappalyze struct {
-	original      *Fingerprints
+	// original holds the fingerprints in their JSON form. For the embedded
+	// fingerprints it is only decoded if GetFingerprints is called.
+	original     *Fingerprints
+	originalOnce sync.Once
+
 	fingerprints  *CompiledFingerprints
 	regexTimeout  time.Duration
 	httpClient    *http.Client
@@ -36,12 +42,11 @@ type Wappalyze struct {
 }
 
 // New creates a new tech detection instance
+//
+// It uses the fingerprints compiled into the binary (see gen.go), so it
+// costs next to nothing: regexes and selectors are compiled on first use.
 func New() (*Wappalyze, error) {
 	wappalyze := &Wappalyze{
-		fingerprints: &CompiledFingerprints{
-			Apps:             make(map[string]*CompiledFingerprint),
-			domPatternsByTag: make(map[string]map[string][]string),
-		},
 		regexTimeout:  100 * time.Millisecond, // A sensible default
 		certInfoCache: &sync.Map{},
 	}
@@ -85,25 +90,42 @@ func New() (*Wappalyze, error) {
 		Transport: transport,
 	}
 
-	err := wappalyze.loadFingerprints()
-	if err != nil {
-		return nil, err
-	}
+	wappalyze.fingerprints = embeddedFingerprints()
 	return wappalyze, nil
 }
+
+// embeddedFingerprints returns the fingerprints compiled into the binary,
+// decoding them on first use.
+func embeddedFingerprints() *CompiledFingerprints {
+	embeddedOnce.Do(func() {
+		f, err := decodeFingerprints(generatedFingerprints, generatedFingerprintText)
+		if err != nil {
+			// The data is generated and checked by tests, so this can't
+			// happen.
+			panic(err)
+		}
+		if !unboundedRepeats {
+			f = f.withBoundedRepeats()
+		}
+		embedded = f
+	})
+	return embedded
+}
+
+var (
+	embeddedOnce sync.Once
+	embedded     *CompiledFingerprints
+)
 
 // NewFromFile creates a new tech detection instance from a file
 // this allows using the latest fingerprints without recompiling the code
 // loadEmbedded indicates whether to load the embedded fingerprints
 // supersede indicates whether to overwrite the embedded fingerprints (if loaded) with the file fingerprints if the app name conflicts
 // supersede is only used if loadEmbedded is true
+//
+// Unlike New, NewFromFile compiles every regex up front.
 func NewFromFile(filePath string, loadEmbedded, supersede bool) (*Wappalyze, error) {
-	wappalyze := &Wappalyze{
-		fingerprints: &CompiledFingerprints{
-			Apps:             make(map[string]*CompiledFingerprint),
-			domPatternsByTag: make(map[string]map[string][]string),
-		},
-	}
+	wappalyze := &Wappalyze{}
 
 	err := wappalyze.loadFingerprintsFromFile(filePath, loadEmbedded, supersede)
 	if err != nil {
@@ -114,8 +136,26 @@ func NewFromFile(filePath string, loadEmbedded, supersede bool) (*Wappalyze, err
 }
 
 // GetFingerprints returns the original fingerprints
+//
+// For the embedded fingerprints they are decoded from JSON on the first
+// call, which takes a while.
 func (s *Wappalyze) GetFingerprints() *Fingerprints {
+	s.originalOnce.Do(func() {
+		if s.original == nil {
+			s.original = embeddedOriginal()
+		}
+	})
 	return s.original
+}
+
+// embeddedOriginal decodes the embedded fingerprints.
+func embeddedOriginal() *Fingerprints {
+	var embedded Fingerprints
+	if err := json.Unmarshal([]byte(assets.FingerprintsJSON), &embedded); err != nil {
+		// The embedded JSON is valid: kitsune-gen compiled it.
+		panic(err)
+	}
+	return &embedded
 }
 
 // GetCompiledFingerprints returns the compiled fingerprints
@@ -130,27 +170,6 @@ func (s *Wappalyze) GetCompiledFingerprints() *CompiledFingerprints {
 func (s *Wappalyze) analyze(resp *http.Response, body []byte) richResult {
 	// Call the new fully pipelined implementation
 	return s.analyzeWithPipeline(resp, body)
-}
-
-// loadFingerprints loads the fingerprints and compiles them
-func (s *Wappalyze) loadFingerprints() error {
-	var fingerprintsStruct Fingerprints
-	err := json.Unmarshal([]byte(fingerprints), &fingerprintsStruct)
-	if err != nil {
-		return err
-	}
-
-	s.original = &fingerprintsStruct
-	for appName, fingerprint := range fingerprintsStruct.Apps {
-		s.fingerprints.Apps[appName] = compileFingerprint(fingerprint)
-
-		// Register DOM patterns for optimization
-		for domSelector := range fingerprint.Dom {
-			s.fingerprints.registerDOMPattern(appName, domSelector)
-		}
-	}
-	s.fingerprints.buildIndexes()
-	return nil
 }
 
 // loadFingerprints loads the fingerprints from the provided file and compiles them
@@ -171,36 +190,29 @@ func (s *Wappalyze) loadFingerprintsFromFile(filePath string, loadEmbedded, supe
 		return fmt.Errorf("no fingerprints found in file: %s", filePath)
 	}
 
+	compiled, _ := compileFingerprints(fingerprintsStruct.Apps)
+
 	if loadEmbedded {
-		var embedded Fingerprints
-		err := json.Unmarshal([]byte(fingerprints), &embedded)
-		if err != nil {
-			return err
+		s.original = embeddedOriginal()
+
+		// The file's fingerprints always replace the embedded ones of the
+		// same name, whatever supersede says.
+		for app, fingerprint := range fingerprintsStruct.Apps {
+			s.original.Apps[app] = fingerprint
 		}
 
-		s.original = &embedded
-
-		for app, fingerprint := range fingerprintsStruct.Apps {
-			if _, ok := s.original.Apps[app]; ok && supersede {
-				s.original.Apps[app] = fingerprint
-			} else {
-				s.original.Apps[app] = fingerprint
+		merged := &CompiledFingerprints{Apps: append([]*CompiledFingerprint(nil), compiled.Apps...)}
+		for _, fp := range embeddedFingerprints().Apps {
+			if _, ok := fingerprintsStruct.Apps[fp.name]; !ok {
+				merged.Apps = append(merged.Apps, fp)
 			}
 		}
-
+		merged.buildIndexes()
+		compiled = merged
 	} else {
 		s.original = &fingerprintsStruct
 	}
-
-	for appName, fingerprint := range s.original.Apps {
-		s.fingerprints.Apps[appName] = compileFingerprint(fingerprint)
-
-		// Register DOM patterns for optimization
-		for domSelector := range fingerprint.Dom {
-			s.fingerprints.registerDOMPattern(appName, domSelector)
-		}
-	}
-	s.fingerprints.buildIndexes()
+	s.fingerprints = compiled
 
 	return nil
 }
@@ -411,11 +423,12 @@ func AppInfoFromFingerprint(fingerprint *CompiledFingerprint) AppInfo {
 			categories = append(categories, category.Name)
 		}
 	}
+	description, website, icon, cpe := fingerprint.appInfo()
 	return AppInfo{
-		Description: fingerprint.description,
-		Website:     fingerprint.website,
-		Icon:        fingerprint.icon,
-		CPE:         fingerprint.cpe,
+		Description: description,
+		Website:     website,
+		Icon:        icon,
+		CPE:         cpe,
 		Categories:  categories,
 	}
 }

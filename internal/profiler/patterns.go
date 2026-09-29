@@ -1,17 +1,23 @@
 package profiler
 
 import (
-	"os"
 	"fmt"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // ParsedPattern encapsulates a regular expression with
 // additional metadata for confidence and version extraction.
 type ParsedPattern struct {
+	// src is the source of the regex, as rewritten by rewriteRegex, or ""
+	// if the pattern has no regex. The regex is compiled from it on first
+	// use (see re), so patterns that are never evaluated cost nothing.
+	src   string
+	once  sync.Once
 	regex *regexp.Regexp
 	// literals are lowercase literals required by regex: it can only match
 	// a target if strings.ToLower(target) contains them. See prefilter.go.
@@ -50,25 +56,10 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 			if p.SkipRegex {
 				continue
 			}
-			regexPattern := part
-
-			// save version capture groups
-			regexPattern = strings.ReplaceAll(regexPattern, verCap1, verCap1Fill)
-			regexPattern = strings.ReplaceAll(regexPattern, verCap2, verCap2Fill)
-
-			regexPattern = strings.ReplaceAll(regexPattern, "\\+", "__escapedPlus__")
-			if !unboundedRepeats {
-				regexPattern = strings.ReplaceAll(regexPattern, "+", "{1,250}")
-				regexPattern = strings.ReplaceAll(regexPattern, "*", "{0,250}")
-			}
-			regexPattern = strings.ReplaceAll(regexPattern, "__escapedPlus__", "\\+")
-
-			// restore version capture groups
-			regexPattern = strings.ReplaceAll(regexPattern, verCap1Fill, verCap1Limited)
-			regexPattern = strings.ReplaceAll(regexPattern, verCap2Fill, verCap2Limited)
+			p.src = "(?i)" + rewriteRegex(part, !unboundedRepeats)
 
 			var err error
-			p.regex, err = regexp.Compile("(?i)" + regexPattern)
+			p.regex, err = regexp.Compile(p.src)
 			if err != nil {
 				return nil, err
 			}
@@ -95,11 +86,51 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 	return p, nil
 }
 
+// rewriteRegex rewrites the regex part of a wappalyzer pattern for Go: it
+// limits the repetitions in version capture groups and, if bounded, replaces
+// the repetition operators + and * with {1,250} and {0,250}.
+//
+// Applying it with bounded set to the result of applying it with bounded
+// unset gives the same as applying it with bounded set to the original, as
+// the limited version capture groups contain neither + nor *.
+func rewriteRegex(regexPattern string, bounded bool) string {
+	// save version capture groups
+	regexPattern = strings.ReplaceAll(regexPattern, verCap1, verCap1Fill)
+	regexPattern = strings.ReplaceAll(regexPattern, verCap2, verCap2Fill)
+
+	regexPattern = strings.ReplaceAll(regexPattern, "\\+", "__escapedPlus__")
+	if bounded {
+		regexPattern = strings.ReplaceAll(regexPattern, "+", "{1,250}")
+		regexPattern = strings.ReplaceAll(regexPattern, "*", "{0,250}")
+	}
+	regexPattern = strings.ReplaceAll(regexPattern, "__escapedPlus__", "\\+")
+
+	// restore version capture groups
+	regexPattern = strings.ReplaceAll(regexPattern, verCap1Fill, verCap1Limited)
+	regexPattern = strings.ReplaceAll(regexPattern, verCap2Fill, verCap2Limited)
+	return regexPattern
+}
+
+// re returns p's regex, compiling it on first use, or nil if p has none. It
+// is safe for concurrent use.
+func (p *ParsedPattern) re() *regexp.Regexp {
+	p.once.Do(func() {
+		if p.regex == nil && p.src != "" {
+			// Only patterns whose regex compiles are kept (see
+			// compilePattern), so this can't fail with the Go version
+			// that generated them. Should it fail anyway, the pattern
+			// matches nothing.
+			p.regex, _ = regexp.Compile(p.src)
+		}
+	})
+	return p.regex
+}
+
 // initPrefilter derives the literal prefilter for p. It is only worth doing
 // for patterns that are evaluated against large inputs.
 func (p *ParsedPattern) initPrefilter() {
-	if p.regex != nil {
-		p.literals = requiredLiterals(p.regex.String(), true)
+	if p.src != "" {
+		p.literals = requiredLiterals(p.src, true)
 	}
 }
 
@@ -115,7 +146,8 @@ func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, st
 	if p.SkipRegex {
 		return true, ""
 	}
-	if p.regex == nil {
+	re := p.re()
+	if re == nil {
 		return false, ""
 	}
 
@@ -123,9 +155,9 @@ func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, st
 	if unboundedRepeats {
 		// RE2 is linear-time; matching directly avoids a goroutine, a timer and
 		// two copies of target per pattern.
-		submatches = p.regex.FindStringSubmatch(target)
+		submatches = re.FindStringSubmatch(target)
 	} else {
-		submatches = matchWithTimeout(p.regex, []byte(target), timeout)
+		submatches = matchWithTimeout(re, []byte(target), timeout)
 	}
 	if len(submatches) == 0 {
 		return false, ""

@@ -112,11 +112,11 @@ func TestPrefilterSoundOnCorpus(t *testing.T) {
 				scanned = m.scan(lowered)
 			}
 			for _, p := range patterns {
-				if p.regex == nil || (p.mayMatch(direct) && p.mayMatch(scanned)) {
+				if p.re() == nil || (p.mayMatch(direct) && p.mayMatch(scanned)) {
 					continue
 				}
-				if p.regex.MatchString(in) {
-					t.Errorf("%s pattern %q matches but prefilter %q rejected it", kind, p.regex, p.literals)
+				if p.re().MatchString(in) {
+					t.Errorf("%s pattern %q matches but prefilter %q rejected it", kind, p.src, p.literals)
 				}
 			}
 		}
@@ -127,8 +127,8 @@ func TestPrefilterSoundOnCorpus(t *testing.T) {
 		cssPats = append(cssPats, fp.css...)
 		script = append(script, fp.scriptSrc...)
 	}
-	check("html", html, htmls, engine.fingerprints.literalMatchers[htmlPart])
-	check("css", cssPats, css, engine.fingerprints.literalMatchers[cssPart])
+	check("html", html, htmls, engine.fingerprints.literalMatcher(htmlPart))
+	check("css", cssPats, css, engine.fingerprints.literalMatcher(cssPart))
 	check("scriptSrc", script, srcs, nil)
 
 	for _, in := range js {
@@ -177,24 +177,30 @@ func TestDOMPrefilterSoundOnCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	selectors := map[string]*domSelector{}
+	for _, fp := range engine.fingerprints.Apps {
+		for _, rule := range fp.dom {
+			selectors[rule.sel.selector] = rule.sel
+		}
+	}
 	withLiterals := 0
-	for _, sel := range engine.fingerprints.domSelectors {
+	for _, sel := range selectors {
 		if sel.literals != nil {
 			withLiterals++
 		}
 	}
-	t.Logf("%d of %d selectors have literals", withLiterals, len(engine.fingerprints.domSelectors))
+	t.Logf("%d of %d selectors have literals", withLiterals, len(selectors))
 	for _, s := range sites {
 		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(s.body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := engine.fingerprints.domLiterals.presence()
+		p := engine.fingerprints.domLiteralMatcher().presence()
 		for _, n := range doc.Nodes {
 			addAttributeValues(p, n)
 		}
 		skipped := 0
-		for selector, sel := range engine.fingerprints.domSelectors {
+		for selector, sel := range selectors {
 			if sel.mayMatch(p.has) {
 				continue
 			}

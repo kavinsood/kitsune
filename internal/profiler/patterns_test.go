@@ -6,10 +6,14 @@ import (
 )
 
 func TestParsePattern(t *testing.T) {
+	// expectedRegex is the regex by default; boundedRegex, if set, is the
+	// regex with KITSUNE_BOUNDED_REPEATS set, which bounds .*, .+ and
+	// character-class repeats to 250.
 	tests := []struct {
 		name          string
 		input         string
 		expectedRegex string
+		boundedRegex  string
 		expectedConf  int
 		expectedVer   string
 		expectError   bool
@@ -17,26 +21,30 @@ func TestParsePattern(t *testing.T) {
 		{
 			name:          "Basic pattern",
 			input:         "Mage.*",
-			expectedRegex: "(?i)Mage.{0,250}",
+			expectedRegex: "(?i)Mage.*",
+			boundedRegex:  "(?i)Mage.{0,250}",
 			expectedConf:  100,
 		},
 		{
 			name:          "With confidence",
 			input:         "Mage.*\\;confidence:50",
-			expectedRegex: "(?i)Mage.{0,250}",
+			expectedRegex: "(?i)Mage.*",
+			boundedRegex:  "(?i)Mage.{0,250}",
 			expectedConf:  50,
 		},
 		{
 			name:          "With version",
 			input:         "jquery-([0-9.]+)\\.js\\;version:\\1",
-			expectedRegex: "(?i)jquery-([0-9.]{1,250})\\.js",
+			expectedRegex: "(?i)jquery-([0-9.]+)\\.js",
+			boundedRegex:  "(?i)jquery-([0-9.]{1,250})\\.js",
 			expectedConf:  100,
 			expectedVer:   "\\1",
 		},
 		{
 			name:          "Complex pattern - 1",
 			input:         "/wp-content/themes/make(?:-child)?/.+frontend\\.js(?:\\?ver=(\\d+(?:\\.\\d+)+))?\\;version:\\1",
-			expectedRegex: `(?i)/wp-content/themes/make(?:-child)?/.{1,250}frontend\.js(?:\?ver=(\d{1,20}(?:\.\d{1,20}){1,20}))?`,
+			expectedRegex: `(?i)/wp-content/themes/make(?:-child)?/.+frontend\.js(?:\?ver=(\d{1,20}(?:\.\d{1,20}){1,20}))?`,
+			boundedRegex:  `(?i)/wp-content/themes/make(?:-child)?/.{1,250}frontend\.js(?:\?ver=(\d{1,20}(?:\.\d{1,20}){1,20}))?`,
 			expectedConf:  100,
 			expectedVer:   "\\1",
 		},
@@ -64,8 +72,12 @@ func TestParsePattern(t *testing.T) {
 				return
 			}
 			if err == nil {
-				if pattern.regex.String() != tt.expectedRegex {
-					t.Errorf("Expected regex = %s, got %s", tt.expectedRegex, pattern.regex.String())
+				want := tt.expectedRegex
+				if !unboundedRepeats && tt.boundedRegex != "" {
+					want = tt.boundedRegex
+				}
+				if pattern.regex.String() != want {
+					t.Errorf("Expected regex = %s, got %s", want, pattern.regex.String())
 				}
 				if pattern.Confidence != tt.expectedConf {
 					t.Errorf("Expected confidence = %d, got %d", tt.expectedConf, pattern.Confidence)
