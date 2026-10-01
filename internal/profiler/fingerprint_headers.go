@@ -4,40 +4,14 @@ import (
 	"strings"
 )
 
-// checkHeaders checks if the headers for a target match the fingerprints
-// and returns the matched IDs if any.
-func (s *Wappalyze) checkHeaders(headers map[string]string) []matchPartResult {
-	technologies := s.fingerprints.matchMapString(headers, headersPart, s.regexTimeout)
-	return technologies
-}
-
-// normalizeHeaders normalizes the headers for the tech discovery on headers
-func (s *Wappalyze) normalizeHeaders(headers map[string][]string) map[string]string {
-	normalized := make(map[string]string, len(headers))
-	data := getHeadersMap(headers)
-
-	for header, value := range data {
-		normalized[strings.ToLower(header)] = strings.ToLower(value)
+// normalizeHeaders returns the headers keyed by lowercased name, keeping
+// every value separately, as wappalyzer matches header patterns against
+// each value.
+func normalizeHeaders(headers map[string][]string) map[string][]string {
+	normalized := make(map[string][]string, len(headers))
+	for name, values := range headers {
+		name = strings.ToLower(name)
+		normalized[name] = append(normalized[name], values...)
 	}
 	return normalized
-}
-
-// GetHeadersMap returns a map[string]string of response headers
-func getHeadersMap(headersArray map[string][]string) map[string]string {
-	headers := make(map[string]string, len(headersArray))
-
-	builder := &strings.Builder{}
-	for key, value := range headersArray {
-		for i, v := range value {
-			builder.WriteString(v)
-			if i != len(value)-1 {
-				builder.WriteString(", ")
-			}
-		}
-		headerValue := builder.String()
-
-		headers[key] = headerValue
-		builder.Reset()
-	}
-	return headers
 }

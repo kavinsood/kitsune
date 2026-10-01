@@ -1,6 +1,7 @@
 package profiler
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -16,26 +17,37 @@ type Fingerprints struct {
 	Apps map[string]*Fingerprint `json:"apps"`
 }
 
-// Fingerprint is a single piece of information about a tech validated and normalized
+// Fingerprint is a single piece of information about a tech validated and normalized.
+//
+// Robots, XHR and Probe need requests a static scan doesn't make, so they are
+// not compiled. RequiresCategory lists category ids, one of which a detected
+// tech must have for this tech to be detected.
 type Fingerprint struct {
-	Cats        []int                             `json:"cats"`
-	CSS         []string                          `json:"css"`
-	Cookies     map[string]string                 `json:"cookies"`
-	Dom         map[string]map[string]interface{} `json:"dom"`
-	JS          map[string]string                 `json:"js"`
-	Headers     map[string]string                 `json:"headers"`
-	HTML        []string                          `json:"html"`
-	Script      []string                          `json:"scripts"`
-	ScriptSrc   []string                          `json:"scriptSrc"`
-	Meta        map[string][]string               `json:"meta"`
-	DNS         map[string][]string               `json:"dns"`
-	Robots      []string                          `json:"robots"`
-	CertIssuer  []string                          `json:"certIssuer"`
-	Implies     []string                          `json:"implies"`
-	Description string                            `json:"description"`
-	Website     string                            `json:"website"`
-	CPE         string                            `json:"cpe"`
-	Icon        string                            `json:"icon"`
+	Cats             []int                             `json:"cats"`
+	CSS              []string                          `json:"css"`
+	Cookies          map[string]string                 `json:"cookies"`
+	Dom              map[string]map[string]interface{} `json:"dom"`
+	JS               map[string]string                 `json:"js"`
+	Headers          map[string]string                 `json:"headers"`
+	HTML             []string                          `json:"html"`
+	Script           []string                          `json:"scripts"`
+	ScriptSrc        []string                          `json:"scriptSrc"`
+	Meta             map[string][]string               `json:"meta"`
+	DNS              map[string][]string               `json:"dns"`
+	Robots           []string                          `json:"robots"`
+	CertIssuer       []string                          `json:"certIssuer"`
+	Text             []string                          `json:"text"`
+	URL              []string                          `json:"url"`
+	XHR              []string                          `json:"xhr"`
+	Probe            json.RawMessage                   `json:"probe,omitempty"`
+	Implies          []string                          `json:"implies"`
+	Requires         []string                          `json:"requires"`
+	RequiresCategory []int                             `json:"requiresCategory"`
+	Excludes         []string                          `json:"excludes"`
+	Description      string                            `json:"description"`
+	Website          string                            `json:"website"`
+	CPE              string                            `json:"cpe"`
+	Icon             string                            `json:"icon"`
 }
 
 // CompiledFingerprints contains the fingerprints for tech detection in the
@@ -58,9 +70,10 @@ type CompiledFingerprints struct {
 	literalMatchersOnce sync.Once
 	literalMatchers     map[part]*literalMatcher
 
-	// jsGlobals is the set of jsGlobalNames. Built on first use.
+	// jsGlobalTechs holds the techs whose js patterns can be evaluated
+	// statically, by global (see jsGlobals). Built on first use.
 	jsGlobalsOnce sync.Once
-	jsGlobals     map[string]struct{}
+	jsGlobalTechs map[string][]jsTech
 
 	// domLiterals finds the literals of the dom selectors. Built on first
 	// use.
@@ -74,8 +87,16 @@ type CompiledFingerprint struct {
 	name string
 	// cats contain categories that are implicit with this tech
 	cats []int
-	// implies contains technologies that are implicit with this tech
+	// implies contains technologies that are implicit with this tech, with
+	// their wappalyzer modifiers (see parseImplied)
 	implies []string
+	// requires and requiresCategory gate the tech: if either is set, it is
+	// only detected if one of the named techs, or a tech in one of the
+	// categories, is detected too.
+	requires         []string
+	requiresCategory []int
+	// excludes contains technologies whose detection this tech overrides
+	excludes []string
 	// info holds the description, website, icon and cpe of the tech,
 	// separated by NULs (see newInfo). One string instead of four keeps
 	// the generated data small.
@@ -98,12 +119,14 @@ type CompiledFingerprint struct {
 	meta []keyedPatterns
 	// dns contains fingerprints for DNS records, sorted by record type
 	dns []keyedPatterns
-	// robots contains fingerprints for robots.txt content
-	robots []*ParsedPattern
 	// certIssuer contains fingerprints for TLS certificate issuers
 	certIssuer []*ParsedPattern
 	// css contains fingerprints for CSS content
 	css []*ParsedPattern
+	// text contains fingerprints for the visible text of the page
+	text []*ParsedPattern
+	// url contains fingerprints for the URL of the page
+	url []*ParsedPattern
 }
 
 // newInfo returns the info field for the given description, website, icon
@@ -138,14 +161,16 @@ type keyedPatterns struct {
 	patterns []*ParsedPattern
 }
 
-// domRule matches elements matching a selector for which all checks pass.
+// domRule is a dom selector with checks of the elements it finds. Each
+// check is a detection of its own: they are not combined.
 type domRule struct {
 	sel    *domSelector
 	checks []domCheck // sorted by name
 }
 
 // domCheck is a check of an element: name is "exists", "text" or the name
-// of an attribute. pattern is nil for "exists".
+// of an attribute. For "exists" the pattern only carries the confidence and
+// version of the detection.
 type domCheck struct {
 	name    string
 	pattern *ParsedPattern
@@ -199,12 +224,15 @@ const (
 	jsPart
 	headersPart
 	htmlPart
-	scriptPart
+	scriptPart // the content of inline and fetched scripts
+	scriptSrcPart
 	metaPart
 	dnsPart
-	robotsPart
 	certIssuerPart
 	cssPart
+	textPart
+	urlPart
+	domPart
 )
 
 // lookup returns the fingerprint of the named tech, or nil.
@@ -217,31 +245,19 @@ func (f *CompiledFingerprints) lookup(name string) *CompiledFingerprint {
 }
 
 // literalMatcher returns the matcher for the prefilter literals of part, or
-// nil if it has none.
+// nil if it has none. Only the parts matched against large inputs have
+// one.
 func (f *CompiledFingerprints) literalMatcher(p part) *literalMatcher {
 	f.literalMatchersOnce.Do(func() {
 		lists := f.literalLists()
 		f.literalMatchers = make(map[part]*literalMatcher)
-		for p, lits := range map[part][]string{htmlPart: lists.html, cssPart: lists.css, robotsPart: lists.robots} {
+		for p, lits := range map[part][]string{htmlPart: lists.html, scriptPart: lists.script, cssPart: lists.css, textPart: lists.text} {
 			if m := newLiteralMatcher(lits); m != nil {
 				f.literalMatchers[p] = m
 			}
 		}
 	})
 	return f.literalMatchers[p]
-}
-
-// hasJSGlobal reports whether name is a JS global used by a js pattern.
-func (f *CompiledFingerprints) hasJSGlobal(name string) bool {
-	f.jsGlobalsOnce.Do(func() {
-		names := f.literalLists().jsGlobals
-		f.jsGlobals = make(map[string]struct{}, len(names))
-		for _, name := range names {
-			f.jsGlobals[name] = struct{}{}
-		}
-	})
-	_, ok := f.jsGlobals[name]
-	return ok
 }
 
 // domLiteralMatcher returns the matcher for the literals of the dom
@@ -255,244 +271,115 @@ func (f *CompiledFingerprints) domLiteralMatcher() *literalMatcher {
 	return f.domLiterals
 }
 
-// matchString matches a string for the fingerprints
+// patternsOf returns the patterns of fingerprint for a part matched
+// against single strings.
+func patternsOf(fingerprint *CompiledFingerprint, part part) []*ParsedPattern {
+	switch part {
+	case htmlPart:
+		return fingerprint.html
+	case scriptPart:
+		return fingerprint.script
+	case scriptSrcPart:
+		return fingerprint.scriptSrc
+	case certIssuerPart:
+		return fingerprint.certIssuer
+	case cssPart:
+		return fingerprint.css
+	case textPart:
+		return fingerprint.text
+	case urlPart:
+		return fingerprint.url
+	}
+	return nil
+}
+
+// matchString matches data against the patterns of part, returning a
+// result for every pattern that matches.
 func (f *CompiledFingerprints) matchString(data string, part part, timeout time.Duration) []matchPartResult {
-	var matched bool
 	var technologies []matchPartResult
 
 	// Lowercase once so each pattern's literal prefilter can rule the input
-	// out without running the regex. ToLower doesn't allocate if data is
-	// already lowercase, as the HTML body is.
+	// out without running the regex.
+	lowered := prefilterInput(data)
 	var has func(lit string) bool
-	if lowered := strings.ToLower(data); !strings.Contains(lowered, foldHazard) {
-		if len(lowered) >= minScanLen {
-			if m := f.literalMatcher(part); m != nil {
-				has = m.scan(lowered)
-			}
+	if len(lowered) >= minScanLen {
+		if m := f.literalMatcher(part); m != nil {
+			has = m.scan(lowered)
 		}
-		if has == nil {
-			has = func(lit string) bool { return strings.Contains(lowered, lit) }
-		}
+	}
+	if has == nil {
+		has = func(lit string) bool { return strings.Contains(lowered, lit) }
 	}
 
 	for _, fingerprint := range f.Apps {
-		var version string
-		confidence := 100
+		for _, pattern := range patternsOf(fingerprint, part) {
+			if !pattern.mayMatch(has) {
+				continue
+			}
+			if valid, version := pattern.Evaluate(data, timeout); valid {
+				technologies = append(technologies, newMatch(fingerprint.name, pattern, version))
+			}
+		}
+	}
+	return technologies
+}
 
-		var patterns []*ParsedPattern
+// matchKeyValues matches values, keyed by lowercase name, against the
+// patterns of part: cookiesPart, headersPart, metaPart or dnsPart. It
+// returns a result for every pattern matching a value of its key. A pattern
+// key ending in "*" matches every name it prefixes, as for wappalyzer's
+// "_ga_*" cookie.
+func (f *CompiledFingerprints) matchKeyValues(values map[string][]string, part part, timeout time.Duration) []matchPartResult {
+	if len(values) == 0 {
+		return nil
+	}
+	var technologies []matchPartResult
+	match := func(fingerprint *CompiledFingerprint, key string, patterns ...*ParsedPattern) {
+		for _, value := range valuesOf(values, key) {
+			for _, pattern := range patterns {
+				if valid, version := pattern.Evaluate(value, timeout); valid {
+					technologies = append(technologies, newMatch(fingerprint.name, pattern, version))
+				}
+			}
+		}
+	}
+	for _, fingerprint := range f.Apps {
 		switch part {
-		case jsPart:
-			for _, kp := range fingerprint.js {
-				patterns = append(patterns, kp.pattern)
+		case cookiesPart, headersPart:
+			kps := fingerprint.cookies
+			if part == headersPart {
+				kps = fingerprint.headers
 			}
-		case scriptPart:
-			patterns = fingerprint.scriptSrc
-		case htmlPart:
-			patterns = fingerprint.html
-		case robotsPart:
-			patterns = fingerprint.robots
-		case certIssuerPart:
-			patterns = fingerprint.certIssuer
-		case cssPart:
-			// Use dedicated CSS patterns
-			patterns = fingerprint.css
-		}
-		for _, pattern := range patterns {
-			if has != nil && !pattern.mayMatch(has) {
-				continue
+			for _, kp := range kps {
+				match(fingerprint, kp.key, kp.pattern)
 			}
-			if valid, versionString := pattern.Evaluate(data, timeout); valid {
-				matched = true
-				if version == "" && versionString != "" {
-					version = versionString
-				}
-				confidence = pattern.Confidence
+		case metaPart, dnsPart:
+			kps := fingerprint.meta
+			if part == dnsPart {
+				kps = fingerprint.dns
+			}
+			for _, kp := range kps {
+				match(fingerprint, kp.key, kp.patterns...)
 			}
 		}
-
-		// If no match, continue with the next fingerprint
-		if !matched {
-			continue
-		}
-
-		// Append the technologies as well as implied ones
-		technologies = append(technologies, matchPartResult{
-			application: fingerprint.name,
-			version:     version,
-			confidence:  confidence,
-		})
-		if len(fingerprint.implies) > 0 {
-			for _, implies := range fingerprint.implies {
-				technologies = append(technologies, matchPartResult{
-					application: implies,
-					confidence:  confidence,
-				})
-			}
-		}
-		matched = false
 	}
 	return technologies
 }
 
-// keyedPatternsOf returns the patterns of fingerprint for part: cookiesPart,
-// headersPart or metaPart.
-//
-// Note that jsPart has none: js patterns have never been matched this way
-// (see the matchMapString call in pipeline.go), and matching them would
-// change detections.
-func keyedPatternsOf(fingerprint *CompiledFingerprint, part part) (single []keyedPattern, multi []keyedPatterns) {
-	switch part {
-	case cookiesPart:
-		return fingerprint.cookies, nil
-	case headersPart:
-		return fingerprint.headers, nil
-	case metaPart:
-		return nil, fingerprint.meta
+// valuesOf returns the values of key, or of every name it prefixes if it
+// ends in "*".
+func valuesOf(values map[string][]string, key string) []string {
+	prefix, wildcard := strings.CutSuffix(key, "*")
+	if !wildcard || prefix == "" {
+		return values[key]
 	}
-	return nil, nil
-}
-
-// matchKeyValue matches a key-value store map for the fingerprints
-func (f *CompiledFingerprints) matchKeyValueString(key, value string, part part, timeout time.Duration) []matchPartResult {
-	return f.matchKeyValues(func(k string) (string, bool) {
-		return value, k == key
-	}, part, timeout)
-}
-
-// matchMapString matches a key-value store map for the fingerprints
-func (f *CompiledFingerprints) matchMapString(keyValue map[string]string, part part, timeout time.Duration) []matchPartResult {
-	return f.matchKeyValues(func(k string) (string, bool) {
-		v, ok := keyValue[k]
-		return v, ok
-	}, part, timeout)
-}
-
-// matchKeyValues matches the values of keys, as reported by get, against
-// the patterns of part.
-func (f *CompiledFingerprints) matchKeyValues(get func(key string) (string, bool), part part, timeout time.Duration) []matchPartResult {
-	var matched bool
-	var technologies []matchPartResult
-
-	for _, fingerprint := range f.Apps {
-		var version string
-		confidence := 100
-
-		single, multi := keyedPatternsOf(fingerprint, part)
-		for _, kp := range single {
-			value, ok := get(kp.key)
-			if !ok {
-				continue
-			}
-			if valid, versionString := kp.pattern.Evaluate(value, timeout); valid {
-				matched = true
-				if version == "" && versionString != "" {
-					version = versionString
-				}
-				confidence = kp.pattern.Confidence
-				break
-			}
+	var out []string
+	for name, vs := range values {
+		if strings.HasPrefix(name, prefix) {
+			out = append(out, vs...)
 		}
-		for _, kp := range multi {
-			value, ok := get(kp.key)
-			if !ok {
-				continue
-			}
-			for _, pattern := range kp.patterns {
-				if valid, versionString := pattern.Evaluate(value, timeout); valid {
-					matched = true
-					if version == "" && versionString != "" {
-						version = versionString
-					}
-					confidence = pattern.Confidence
-					break
-				}
-			}
-		}
-
-		// If no match, continue with the next fingerprint
-		if !matched {
-			continue
-		}
-
-		technologies = append(technologies, matchPartResult{
-			application: fingerprint.name,
-			version:     version,
-			confidence:  confidence,
-		})
-		if len(fingerprint.implies) > 0 {
-			for _, implies := range fingerprint.implies {
-				technologies = append(technologies, matchPartResult{
-					application: implies,
-					confidence:  confidence,
-				})
-			}
-		}
-		matched = false
 	}
-	return technologies
-}
-
-// matchDNSRecords matches DNS records against fingerprint patterns
-func (f *CompiledFingerprints) matchDNSRecords(dnsRecords map[string][]string, timeout time.Duration) []matchPartResult {
-	var matched bool
-	var technologies []matchPartResult
-
-	for _, fingerprint := range f.Apps {
-		var version string
-		confidence := 100
-
-		// Skip if fingerprint has no DNS patterns
-		if len(fingerprint.dns) == 0 {
-			continue
-		}
-
-		for _, kp := range fingerprint.dns {
-			recordValues, ok := dnsRecords[kp.key]
-			if !ok {
-				continue // No matching record type found
-			}
-
-			// Try to match any record value against any pattern for this record type
-			for _, recordValue := range recordValues {
-				for _, pattern := range kp.patterns {
-					if valid, versionString := pattern.Evaluate(recordValue, timeout); valid {
-						matched = true
-						if version == "" && versionString != "" {
-							version = versionString
-						}
-						confidence = pattern.Confidence
-						break
-					}
-				}
-				// If we found a match in this record type, no need to check more values
-				if matched {
-					break
-				}
-			}
-		}
-
-		// If no match, continue with the next fingerprint
-		if !matched {
-			continue
-		}
-
-		// Append the technologies as well as implied ones
-		technologies = append(technologies, matchPartResult{
-			application: fingerprint.name,
-			version:     version,
-			confidence:  confidence,
-		})
-		if len(fingerprint.implies) > 0 {
-			for _, implies := range fingerprint.implies {
-				technologies = append(technologies, matchPartResult{
-					application: implies,
-					confidence:  confidence,
-				})
-			}
-		}
-		matched = false
-	}
-	return technologies
+	return out
 }
 
 func FormatAppVersion(app, version string) string {

@@ -1,55 +1,54 @@
 package profiler
 
 import (
+	"net/http"
 	"strings"
 )
 
-// checkCookies checks if the cookies for a target match the fingerprints
-// and returns the matched IDs if any.
-func (s *Wappalyze) checkCookies(cookies []string) []matchPartResult {
-	// Normalize the cookies for further processing
-	normalized := s.normalizeCookies(cookies)
-
-	technologies := s.fingerprints.matchMapString(normalized, cookiesPart, s.regexTimeout)
-	return technologies
+// cookieValues returns the cookies set by the Set-Cookie headers of
+// headers (keyed by lowercased name), keyed by lowercased cookie name as
+// wappalyzer keys them. Malformed cookies are skipped.
+func cookieValues(headers map[string][]string) map[string][]string {
+	cookies := make(map[string][]string)
+	for _, line := range headers["set-cookie"] {
+		for _, setCookie := range splitSetCookie(line) {
+			cookie, err := http.ParseSetCookie(setCookie)
+			if err != nil {
+				continue
+			}
+			name := strings.ToLower(cookie.Name)
+			cookies[name] = append(cookies[name], cookie.Value)
+		}
+	}
+	return cookies
 }
 
-const keyValuePairLength = 2
-
-// normalizeCookies normalizes the cookies and returns an
-// easily parsed format that can be processed upon.
-func (s *Wappalyze) normalizeCookies(cookies []string) map[string]string {
-	normalized := make(map[string]string)
-
-	for _, part := range cookies {
-		parts := strings.SplitN(strings.Trim(part, " "), "=", keyValuePairLength)
-		if len(parts) < keyValuePairLength {
+// splitSetCookie splits a Set-Cookie header value into the cookies it sets.
+// It normally sets one, but the fetch API joins the Set-Cookie headers of a
+// response with ", ", so a comma followed by name= starts another cookie,
+// unless it is the comma of an Expires date ("Expires=Thu, 01 Jan ...").
+func splitSetCookie(line string) []string {
+	var out []string
+	start := 0
+	for i := 0; i < len(line); i++ {
+		if line[i] != ',' {
 			continue
 		}
-		normalized[parts[0]] = parts[1]
-	}
-	return normalized
-}
-
-// findSetCookie finds the set cookie header from the normalized headers
-func (s *Wappalyze) findSetCookie(headers map[string]string) []string {
-	value, ok := headers["set-cookie"]
-	if !ok {
-		return nil
-	}
-
-	var values []string
-	for _, v := range strings.Split(value, " ") {
-		if v == "" {
+		attr := line[start:i]
+		if semi := strings.LastIndexByte(attr, ';'); semi >= 0 {
+			attr = attr[semi+1:]
+		}
+		attr = strings.TrimSpace(attr)
+		if len(attr) >= 8 && strings.EqualFold(attr[:8], "expires=") && !strings.ContainsRune(attr, ' ') {
+			continue // the comma after the weekday
+		}
+		next := strings.TrimLeft(line[i+1:], " ")
+		eq := strings.IndexByte(next, '=')
+		if eq <= 0 || strings.ContainsAny(next[:eq], ";, ") {
 			continue
 		}
-		if strings.Contains(v, ",") {
-			values = append(values, strings.Split(v, ",")...)
-		} else if strings.Contains(v, ";") {
-			values = append(values, strings.Split(v, ";")...)
-		} else {
-			values = append(values, v)
-		}
+		out = append(out, line[start:i])
+		start = i + 1
 	}
-	return values
+	return append(out, line[start:])
 }

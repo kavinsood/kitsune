@@ -48,8 +48,8 @@ func TestFoldHazard(t *testing.T) {
 	if lits := requiredLiterals(re.String(), true); lits.in(strings.ToLower(input)) {
 		t.Fatal("prefilter unexpectedly passed; foldHazard handling is untested")
 	}
-	if !strings.Contains(strings.ToLower(input), foldHazard) {
-		t.Fatal("foldHazard not detected")
+	if lits := requiredLiterals(re.String(), true); !lits.in(prefilterInput(input)) {
+		t.Fatal("prefilter rejected prefilterInput(input)")
 	}
 }
 
@@ -105,7 +105,7 @@ func TestPrefilterSoundOnCorpus(t *testing.T) {
 	}
 	check := func(kind string, patterns []*ParsedPattern, inputs []string, m *literalMatcher) {
 		for _, in := range inputs {
-			lowered := strings.ToLower(in)
+			lowered := prefilterInput(in)
 			direct := func(lit string) bool { return strings.Contains(lowered, lit) }
 			scanned := direct
 			if m != nil {
@@ -121,24 +121,18 @@ func TestPrefilterSoundOnCorpus(t *testing.T) {
 			}
 		}
 	}
-	var html, cssPats, script []*ParsedPattern
+	var html, cssPats, script, scripts []*ParsedPattern
 	for _, fp := range engine.fingerprints.Apps {
 		html = append(html, fp.html...)
 		cssPats = append(cssPats, fp.css...)
 		script = append(script, fp.scriptSrc...)
+		scripts = append(scripts, fp.script...)
 	}
 	check("html", html, htmls, engine.fingerprints.literalMatcher(htmlPart))
 	check("css", cssPats, css, engine.fingerprints.literalMatcher(cssPart))
 	check("scriptSrc", script, srcs, nil)
 
-	for _, in := range js {
-		has := libraryLiterals.scan(in)
-		for name, re := range libraryPatterns {
-			if !re.literals.satisfied(has) && re.Regexp.MatchString(in) {
-				t.Errorf("library pattern %s matches but prefilter %q rejected it", name, re.literals)
-			}
-		}
-	}
+	check("script", scripts, js, engine.fingerprints.literalMatcher(scriptPart))
 }
 
 func TestSelectorLiterals(t *testing.T) {
@@ -210,115 +204,5 @@ func TestDOMPrefilterSoundOnCorpus(t *testing.T) {
 			}
 		}
 		t.Logf("%s: skipped %d selectors", s.URL, skipped)
-	}
-}
-
-// checkPropWindows checks that the run-based property path extraction gives
-// exactly the results of running the regexes over the whole input.
-func checkPropWindows(t *testing.T, js string) {
-	t.Helper()
-	if got, want := propPathMatches(js), propPathPattern.FindAllStringSubmatch(js, -1); !reflect.DeepEqual(got, want) {
-		t.Fatalf("propPathMatches(%.200q) = %q, want %q", js, got, want)
-	}
-	if got, want := propAccesses(js), propAccessPattern.FindAllString(js, -1); !reflect.DeepEqual(got, want) {
-		t.Fatalf("propAccesses(%.200q) = %q, want %q", js, got, want)
-	}
-}
-
-func TestPropWindows(t *testing.T) {
-	for _, js := range []string{
-		"", "a.b", "a.b=1", "a.b = 'x'", `a.b="c.d=1"`, "a.b==c.d", "x..a.b=1", ".a.b=1",
-		"a.b.=1", "a...b=1", "$.fn.jquery='3'", "a.$=1", "$a.b$.c", "é.a.b", "a.b\n\t=\n\"\"x",
-		"window.foo.bar(baz.qux)", "a.b=''\"\"", "a.b=\xff", "\xffa.b\xff",
-	} {
-		checkPropWindows(t, js)
-	}
-	r := rand.New(rand.NewSource(1))
-	const alphabet = "ab_$0..  ==\"'\n\xc3\xa9;("
-	for iter := 0; iter < 20000; iter++ {
-		b := make([]byte, r.Intn(40))
-		for i := range b {
-			b[i] = alphabet[r.Intn(len(alphabet))]
-		}
-		checkPropWindows(t, string(b))
-	}
-}
-
-func TestPrefixFind(t *testing.T) {
-	for _, tt := range []struct {
-		expr string
-		want []string
-	}{
-		{`(?:mobx|action|autorun)\b`, []string{"mobx", "action", "autorun"}},
-		{`(?:jest\.|describe\s*\()`, []string{"jest.", "describe"}},
-		{`(ab|cd)+x`, []string{"ab", "cd"}},
-		{`[ab]c`, []string{"a", "b"}},
-		{`\bfoo`, nil},
-		{`(?i)foo`, nil},
-		{`a*b`, nil},
-		{`foo|b?ar`, nil},
-	} {
-		re := mustCompilePrefiltered(tt.expr)
-		if !reflect.DeepEqual(re.prefixes, tt.want) {
-			t.Errorf("prefixes of %q = %q, want %q", tt.expr, re.prefixes, tt.want)
-		}
-	}
-
-	r := rand.New(rand.NewSource(1))
-	const alphabet = "abcd$_. x\n"
-	for _, expr := range []string{`(?:ab|cd)\b`, `a(b|c)+`, `(?:ab|cd)(x)?`, `ab\s*(\w+)$`, `(?:a|b)(?:c|d)\b.`, `abc|a\bb`, `(?m)ab^c|ab$`, `a(?:bc|b)(d)?`} {
-		re := mustCompilePrefiltered(expr)
-		if re.anchored == nil {
-			t.Fatalf("expected prefixes for %q", expr)
-		}
-		for iter := 0; iter < 5000; iter++ {
-			b := make([]byte, r.Intn(30))
-			for i := range b {
-				b[i] = alphabet[r.Intn(len(alphabet))]
-			}
-			if got, want := re.find(string(b)), re.Regexp.FindStringSubmatch(string(b)); !reflect.DeepEqual(got, want) {
-				t.Fatalf("%q.find(%q) = %q, want %q", expr, b, got, want)
-			}
-		}
-	}
-}
-
-// TestPrefixFindOnCorpus checks that find gives the plain regexp's results
-// for the real patterns on corpus scripts and their statements.
-func TestPrefixFindOnCorpus(t *testing.T) {
-	patterns := map[string]*prefilteredRegexp{
-		"varDecl": varDeclPattern, "windowAssign": windowAssignPattern,
-		"thisAssign": thisAssignPattern, "classAdd": classAddPattern,
-	}
-	for name, re := range libraryPatterns {
-		patterns[name] = re
-	}
-	check := func(in string) {
-		for name, re := range patterns {
-			if got, want := re.find(in), re.Regexp.FindStringSubmatch(in); !reflect.DeepEqual(got, want) {
-				t.Fatalf("%s: find = %q, want %q", name, got, want)
-			}
-		}
-	}
-	for _, s := range loadCorpus(t) {
-		for u, e := range s.files {
-			if !strings.Contains(e.ContentType, "javascript") {
-				continue
-			}
-			js := string(s.data[u])
-			check(js)
-			for _, stmt := range SplitIntoStatements(js) {
-				check(stmt)
-			}
-		}
-	}
-}
-
-func TestPropWindowsOnCorpus(t *testing.T) {
-	for _, s := range loadCorpus(t) {
-		for u := range s.files {
-			checkPropWindows(t, string(s.data[u]))
-		}
-		checkPropWindows(t, string(s.body))
 	}
 }

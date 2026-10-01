@@ -15,18 +15,30 @@ func TestCookiesDetect(t *testing.T) {
 	}, []byte(""))
 	require.Contains(t, matches, "Microsoft Advertising", "Could not get correct match")
 
-	t.Run("position", func(t *testing.T) {
-		wappalyzerClient, _ := New()
-
-		fingerprints := wappalyzerClient.Fingerprint(map[string][]string{
-			"Set-Cookie": {"path=/; jsessionid=111; path=/, jsessionid=111;"},
+	t.Run("headers", func(t *testing.T) {
+		got := wappalyzer.Fingerprint(map[string][]string{
+			"Set-Cookie": {
+				"JSESSIONID=111; Path=/; HttpOnly",
+				"XSRF-TOKEN=abc; Expires=Thu, 01 Jan 2030 00:00:00 GMT; Path=/",
+				"laravel_session=eyJ; Path=/",
+			},
 		}, []byte(""))
-		fingerprints1 := wappalyzerClient.Fingerprint(map[string][]string{
-			"Set-Cookie": {"jsessionid=111; path=/, XSRF-TOKEN=; expires=test, path=/ laravel_session=eyJ*"},
-		}, []byte(""))
+		require.Equal(t, map[string]struct{}{"Java": {}, "Laravel": {}, "PHP": {}}, got)
+	})
 
-		require.Equal(t, map[string]struct{}{"Java": {}}, fingerprints, "could not get correct fingerprints")
-		require.Equal(t, map[string]struct{}{"Java": {}, "Laravel": {}, "PHP": {}}, fingerprints1, "could not get correct fingerprints")
+	t.Run("fetch joined", func(t *testing.T) {
+		// The fetch API joins Set-Cookie headers with ", ".
+		got := wappalyzer.Fingerprint(map[string][]string{
+			"Set-Cookie": {"XSRF-TOKEN=abc; Expires=Thu, 01 Jan 2030 00:00:00 GMT; Path=/, laravel_session=eyJ; Path=/"},
+		}, []byte(""))
+		require.Equal(t, map[string]struct{}{"Laravel": {}, "PHP": {}}, got)
+	})
+
+	t.Run("attributes are not cookies", func(t *testing.T) {
+		got := wappalyzer.Fingerprint(map[string][]string{
+			"Set-Cookie": {"a=1; jsessionid=111; Path=/"},
+		}, []byte(""))
+		require.Empty(t, got)
 	})
 }
 
@@ -55,7 +67,7 @@ func TestBodyDetect(t *testing.T) {
 	})
 
 	t.Run("html-implied", func(t *testing.T) {
-		matches := wappalyzer.Fingerprint(map[string][]string{}, []byte(`<html data-ng-app="rbschangeapp">
+		matches := wappalyzer.Fingerprint(map[string][]string{}, []byte(`<html data-ng-app="RbsChangeApp">
 <head>
 </head>
 <body>
@@ -97,4 +109,3 @@ func TestUniqueFingerprints(t *testing.T) {
 		require.Equal(t, map[string]struct{}{"test:2.36.4": {}}, f.GetValues(), "could not get correct values")
 	})
 }
-

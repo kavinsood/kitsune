@@ -1,7 +1,6 @@
 package profiler
 
 import (
-	"bytes"
 	"strings"
 	"sync"
 
@@ -83,16 +82,12 @@ func addAttributeValues(p *literalPresence, n *html.Node) {
 	}
 }
 
-// analyzeDOM checks for DOM patterns in the HTML using goquery selectors
-// and returns detected technologies
+// analyzeDOM matches the dom rules against doc. As in wappalyzer, each
+// check of a rule ("exists", "text" or an attribute) that passes for some
+// element the selector finds is a detection of its own, with the
+// confidence and version of its pattern.
 func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 	var technologies []matchPartResult
-
-	// Skip DOM detection in testing mode if needed
-	if doc.Find("html").Length() == 0 {
-		// This is likely a test with minimal/empty HTML
-		return technologies
-	}
 
 	// Find which selector literals occur in the document's attribute values,
 	// so selectors that can't match needn't be run.
@@ -105,6 +100,7 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 		has = p.has
 	}
 
+	texts := make(elementTexts)
 	for _, fingerprint := range s.fingerprints.Apps {
 		for _, rule := range fingerprint.dom {
 			if !rule.sel.mayMatch(has) {
@@ -114,156 +110,131 @@ func (s *Wappalyze) analyzeDOM(doc *goquery.Document) []matchPartResult {
 			if matcher == nil {
 				continue
 			}
-			// Use goquery to find all elements matching the selector
 			elements := doc.FindMatcher(matcher)
-
-			// If no elements found, continue to next selector
 			if elements.Length() == 0 {
 				continue
 			}
-
-			// Check if any element matches all the pattern checks
-			elements.EachWithBreak(func(i int, selection *goquery.Selection) bool {
-				// Once an element is found, perform all checks defined for it
-				for _, check := range rule.checks {
-					checkPassed := false
-					pattern := check.pattern
-
-					switch check.name {
-					case "exists", "main":
-						// The selector found an element, so this check passes by default
-						checkPassed = true
-					case "text":
-						// Element text content check
-						if pattern != nil {
-							if matched, _ := pattern.Evaluate(selection.Text(), s.regexTimeout); matched {
-								checkPassed = true
-							}
-						}
-					default:
-						// Attribute checks (like href, src, class, etc.)
-						if pattern != nil {
-							if attrVal, exists := selection.Attr(check.name); exists {
-								if matched, _ := pattern.Evaluate(attrVal, s.regexTimeout); matched {
-									checkPassed = true
-								}
-							}
-						}
-					}
-
-					if !checkPassed {
-						return true // Continue to next element
-					}
+			for _, check := range rule.checks {
+				if ok, version := s.domCheck(elements, check, texts); ok {
+					technologies = append(technologies, newMatch(fingerprint.name, check.pattern, version))
 				}
-
-				// All checks for this selector passed
-				technologies = append(technologies, matchPartResult{
-					application: fingerprint.name,
-					confidence:  100,
-				})
-
-				// Add implied technologies
-				for _, implied := range fingerprint.implies {
-					technologies = append(technologies, matchPartResult{
-						application: implied,
-						confidence:  100,
-					})
-				}
-
-				return false // Break the .EachWithBreak loop
-			})
-		}
-	}
-
-	return technologies
-}
-
-// parseBodyForDOMAnalysis parses HTML body into a goquery document
-// and collects script and style URLs for further analysis
-// It also handles HTML pattern matching on the raw HTML content
-func (s *Wappalyze) parseBodyForDOMAnalysis(body []byte) (*goquery.Document, []string, []string) {
-	var scriptURLs []string
-	var styleURLs []string
-
-	// Create goquery document from HTML body
-	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
-	if err != nil {
-		// Return nil document if parsing fails
-		return nil, scriptURLs, styleURLs
-	}
-
-	// Extract script URLs for JavaScript analysis
-	doc.Find("script[src]").Each(func(i int, s *goquery.Selection) {
-		if src, exists := s.Attr("src"); exists && src != "" {
-			scriptURLs = append(scriptURLs, src)
-		}
-	})
-
-	// Extract stylesheet URLs for CSS analysis
-	doc.Find("link[rel=stylesheet][href]").Each(func(i int, s *goquery.Selection) {
-		if href, exists := s.Attr("href"); exists && href != "" {
-			styleURLs = append(styleURLs, href)
-		}
-	})
-
-	return doc, scriptURLs, styleURLs
-}
-
-// analyzeMeta extracts and analyzes meta tags from the document
-func (s *Wappalyze) analyzeMeta(doc *goquery.Document) []matchPartResult {
-	var technologies []matchPartResult
-	metaTags := make(map[string]string)
-
-	// Process meta tags
-	doc.Find("meta").Each(func(i int, elem *goquery.Selection) {
-		// Look for name attribute first
-		name, nameExists := elem.Attr("name")
-		if !nameExists {
-			// If name doesn't exist, try http-equiv
-			name, nameExists = elem.Attr("http-equiv")
-			if !nameExists {
-				// No identifying attribute found
-				return
 			}
 		}
-
-		// Get content attribute
-		content, contentExists := elem.Attr("content")
-		if !contentExists || content == "" {
-			return
-		}
-
-		// Store meta tag for processing
-		metaTags[strings.ToLower(name)] = content
-	})
-
-	// Match all meta tags against fingerprints
-	metaTech := s.fingerprints.matchMapString(metaTags, metaPart, s.regexTimeout)
-	if len(metaTech) > 0 {
-		technologies = append(technologies, metaTech...)
 	}
-
 	return technologies
 }
 
-// analyzeScriptSrc analyzes script src attributes for fingerprints
-func (s *Wappalyze) analyzeScriptSrc(doc *goquery.Document) []matchPartResult {
-	var technologies []matchPartResult
-
-	// Process script tags with src attribute
-	doc.Find("script[src]").Each(func(i int, elem *goquery.Selection) {
-		src, exists := elem.Attr("src")
-		if !exists || src == "" {
-			return
+// domCheck reports whether check passes for one of elements, and the
+// version it yields. texts caches the text of elements.
+func (s *Wappalyze) domCheck(elements *goquery.Selection, check domCheck, texts elementTexts) (matched bool, version string) {
+	if check.name == "exists" {
+		return check.pattern.Evaluate("", s.regexTimeout)
+	}
+	for _, n := range elements.Nodes {
+		var value string
+		var has func(string) bool
+		if check.name == "text" {
+			t := texts.get(n)
+			value, has = t.text, t.has
+		} else {
+			var ok bool
+			if value, ok = attr(n, check.name); !ok {
+				continue
+			}
+			if len(value) >= minDOMPrefilterLen {
+				has = containsFunc(prefilterInput(value))
+			}
 		}
+		if has != nil && !check.pattern.mayMatch(has) {
+			continue
+		}
+		if matched, version = check.pattern.Evaluate(value, s.regexTimeout); matched {
+			return matched, version
+		}
+	}
+	return false, ""
+}
 
-		// Match script src against fingerprints
-		scriptTech := s.fingerprints.matchString(src, scriptPart, s.regexTimeout)
-		if len(scriptTech) > 0 {
-			technologies = append(technologies, scriptTech...)
+// attr returns the value of n's attribute key.
+func attr(n *html.Node, key string) (string, bool) {
+	for _, a := range n.Attr {
+		if a.Namespace == "" && a.Key == key {
+			return a.Val, true
+		}
+	}
+	return "", false
+}
+
+// minDOMPrefilterLen is the length of the shortest dom value whose
+// pattern's prefilter is checked before running its regex. For shorter
+// values the regex is about as cheap.
+const minDOMPrefilterLen = 256
+
+// containsFunc returns a function reporting whether s contains a string.
+func containsFunc(s string) func(string) bool {
+	return func(sub string) bool { return strings.Contains(s, sub) }
+}
+
+// elementText is the text of an element as matched by dom text checks.
+type elementText struct {
+	text string
+	// has reports whether a prefilter literal occurs in text, or is nil
+	// if text is too short for prefiltering to pay off.
+	has func(string) bool
+}
+
+// elementTexts caches the text of elements, which many checks may inspect.
+type elementTexts map[*html.Node]*elementText
+
+func (texts elementTexts) get(n *html.Node) *elementText {
+	t := texts[n]
+	if t == nil {
+		t = &elementText{text: strings.TrimSpace(nodeText(n))}
+		if len(t.text) >= minDOMPrefilterLen {
+			t.has = containsFunc(prefilterInput(t.text))
+		}
+		texts[n] = t
+	}
+	return t
+}
+
+// nodeText returns the text of n and its descendants, like goquery's Text.
+func nodeText(n *html.Node) string {
+	var b strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			b.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(n)
+	return b.String()
+}
+
+// metaValues returns the content of the meta tags of doc, keyed by their
+// lowercased name, property and http-equiv attributes. Every value of a
+// key is kept, including empty ones: a pattern for a meta tag may only
+// require it to exist.
+func metaValues(doc *goquery.Document) map[string][]string {
+	meta := make(map[string][]string)
+	doc.Find("meta").Each(func(_ int, el *goquery.Selection) {
+		content, _ := el.Attr("content")
+		var keys [3]string
+		for i, attr := range [...]string{"name", "property", "http-equiv"} {
+			key, ok := el.Attr(attr)
+			if !ok {
+				continue
+			}
+			key = strings.ToLower(strings.TrimSpace(key))
+			if key == "" || key == keys[0] || key == keys[1] {
+				continue
+			}
+			keys[i] = key
+			meta[key] = append(meta[key], content)
 		}
 	})
-
-	return technologies
+	return meta
 }
-

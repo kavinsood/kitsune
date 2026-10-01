@@ -7,16 +7,16 @@ import (
 // fingerprintCounts are the numbers of items of each kind in encoded
 // fingerprints, so that the decoder can allocate them all at once.
 type fingerprintCounts struct {
-	patterns, selectors, apps                     int
-	literalSets, literals                         int
-	cats, implies, keyed, patternRefs, multiKeyed int
-	domRules, domChecks                           int
+	patterns, selectors, apps                   int
+	literalSets, literals                       int
+	cats, names, keyed, patternRefs, multiKeyed int
+	domRules, domChecks                         int
 }
 
 // fields returns pointers to the counts in encoding order.
 func (c *fingerprintCounts) fields() []*int {
 	return []*int{&c.patterns, &c.selectors, &c.apps, &c.literalSets, &c.literals,
-		&c.cats, &c.implies, &c.keyed, &c.patternRefs, &c.multiKeyed, &c.domRules, &c.domChecks}
+		&c.cats, &c.names, &c.keyed, &c.patternRefs, &c.multiKeyed, &c.domRules, &c.domChecks}
 }
 
 // decodeFingerprints decodes fingerprints encoded by encodeFingerprints. See
@@ -46,7 +46,7 @@ func decodeFingerprints(data, text string) (f *CompiledFingerprints, err error) 
 		literalSets: make([][]string, c.literalSets),
 		literals:    make([]string, c.literals),
 		cats:        make([]int, c.cats),
-		implies:     make([]string, c.implies),
+		names:       make([]string, c.names),
 		keyed:       make([]keyedPattern, c.keyed),
 		patternRefs: make([]*ParsedPattern, c.patternRefs),
 		multiKeyed:  make([]keyedPatterns, c.multiKeyed),
@@ -100,10 +100,22 @@ func decodeFingerprints(data, text string) (f *CompiledFingerprints, err error) 
 			}
 		}
 		if n := d.uint(); n > 0 {
-			fp.implies = takeNonNil(&a.implies, n-1, d)
+			fp.implies = takeNonNil(&a.names, n-1, d)
 			for j := range fp.implies {
 				fp.implies[j] = d.str()
 			}
+		}
+		fp.requires = take(&a.names, d.uint(), d)
+		for j := range fp.requires {
+			fp.requires[j] = d.str()
+		}
+		fp.requiresCategory = take(&a.cats, d.uint(), d)
+		for j := range fp.requiresCategory {
+			fp.requiresCategory[j] = d.uint()
+		}
+		fp.excludes = take(&a.names, d.uint(), d)
+		for j := range fp.excludes {
+			fp.excludes[j] = d.str()
 		}
 		fp.info = d.str()
 		keyed := func() []keyedPattern {
@@ -136,9 +148,10 @@ func decodeFingerprints(data, text string) (f *CompiledFingerprints, err error) 
 		fp.scriptSrc = list()
 		fp.meta = multiKeyed()
 		fp.dns = multiKeyed()
-		fp.robots = list()
 		fp.certIssuer = list()
 		fp.css = list()
+		fp.text = list()
+		fp.url = list()
 		fp.dom = take(&a.domRules, d.uint(), d)
 		for j := range fp.dom {
 			rule := &fp.dom[j]
@@ -151,12 +164,7 @@ func decodeFingerprints(data, text string) (f *CompiledFingerprints, err error) 
 			for k := range rule.checks {
 				check := &rule.checks[k]
 				check.name = d.str()
-				if pi := d.uint(); pi > 0 {
-					if pi-1 >= len(patterns) {
-						d.fail("pattern index out of range")
-					}
-					check.pattern = &patterns[pi-1]
-				}
+				check.pattern = pattern()
 			}
 		}
 	}
@@ -171,7 +179,7 @@ type decodeAlloc struct {
 	literalSets [][]string
 	literals    []string
 	cats        []int
-	implies     []string
+	names       []string
 	keyed       []keyedPattern
 	patternRefs []*ParsedPattern
 	multiKeyed  []keyedPatterns

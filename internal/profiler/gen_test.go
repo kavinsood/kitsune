@@ -141,24 +141,27 @@ func TestNewFromFile(t *testing.T) {
 	}
 }
 
-// TestDOMRuleWithBadRegexDropped checks that a dom rule is dropped as a
-// whole when one of its checks can't be evaluated (a regex that doesn't
-// compile, or JS "properties"), rather than losing just that check and
-// matching every element the selector finds.
+// TestDOMRuleWithBadRegexDropped checks that a dom check that can't be
+// evaluated (a regex that doesn't compile) is dropped, and with it a rule
+// left with no checks, and that a rule using JS "properties" is dropped as a
+// whole: its other checks would detect what the properties are meant to
+// narrow down.
 func TestDOMRuleWithBadRegexDropped(t *testing.T) {
 	f, dropped := compileFingerprints(map[string]*Fingerprint{"App": {Dom: map[string]map[string]interface{}{
 		"style":  {"text": "/sites/(?!default/)"},
 		"a[x]":   {"attributes": map[string]interface{}{"href": "ok", "title": "(?!bad)"}},
 		"link":   {"exists": ""},
 		"script": {"text": "fine"},
-		"body":   {"properties": map[string]interface{}{"__k": ""}},
+		"body":   {"properties": map[string]interface{}{"__k": ""}, "exists": ""},
 	}}})
 	var got []string
 	for _, rule := range f.Apps[0].dom {
-		got = append(got, rule.sel.selector)
+		for _, check := range rule.checks {
+			got = append(got, rule.sel.selector+"/"+check.name)
+		}
 	}
-	if fmt.Sprint(got) != "[link script]" || len(dropped) != 2 {
-		t.Errorf("got rules %v, dropped %q; want rules [link script] and 2 dropped", got, dropped)
+	if fmt.Sprint(got) != "[a[x]/href link/exists script/text]" || len(dropped) != 2 {
+		t.Errorf("got checks %v, dropped %q; want checks [a[x]/href link/exists script/text] and 2 dropped", got, dropped)
 	}
 	// This regex compiles, but not with its repeats bounded.
 	old := unboundedRepeats
@@ -226,7 +229,8 @@ func dumpCompiled(f *CompiledFingerprints) string {
 	var b strings.Builder
 	for _, fp := range f.Apps {
 		d, w, i, cpe := fp.appInfo()
-		fmt.Fprintf(&b, "APP %q cats=%v implies=%q d=%q w=%q i=%q cpe=%q\n", fp.name, fp.cats, fp.implies, d, w, i, cpe)
+		fmt.Fprintf(&b, "APP %q cats=%v implies=%q requires=%q requiresCategory=%v excludes=%q d=%q w=%q i=%q cpe=%q\n",
+			fp.name, fp.cats, fp.implies, fp.requires, fp.requiresCategory, fp.excludes, d, w, i, cpe)
 		keyed := func(kind string, kps []keyedPattern) {
 			for _, kp := range kps {
 				fmt.Fprintf(&b, " %s %q %s\n", kind, kp.key, dumpPattern(kp.pattern))
@@ -253,9 +257,10 @@ func dumpCompiled(f *CompiledFingerprints) string {
 		list("html", fp.html)
 		list("script", fp.script)
 		list("scriptSrc", fp.scriptSrc)
-		list("robots", fp.robots)
 		list("cert", fp.certIssuer)
 		list("css", fp.css)
+		list("text", fp.text)
+		list("url", fp.url)
 		for _, rule := range fp.dom {
 			fmt.Fprintf(&b, " dom %q lits=%q\n", rule.sel.selector, rule.sel.literals)
 			for _, check := range rule.checks {
@@ -267,11 +272,10 @@ func dumpCompiled(f *CompiledFingerprints) string {
 	for _, p := range []struct {
 		part part
 		lits []string
-	}{{htmlPart, lists.html}, {cssPart, lists.css}, {robotsPart, lists.robots}} {
+	}{{htmlPart, lists.html}, {scriptPart, lists.script}, {cssPart, lists.css}, {textPart, lists.text}} {
 		fmt.Fprintf(&b, "PARTLITS %d %q\n", p.part, uniqueSorted(p.lits))
 	}
 	fmt.Fprintf(&b, "DOMLITS %q\n", uniqueSorted(lists.dom))
-	fmt.Fprintf(&b, "JSGLOBALS %q\n", uniqueSorted(lists.jsGlobals))
 	var cats []string
 	for id, c := range categoriesMapping {
 		cats = append(cats, fmt.Sprintf("%d=%q/%d", id, c.Name, c.Priority))

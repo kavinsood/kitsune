@@ -43,13 +43,15 @@ import (
 //	selectors, each:
 //	        selector, literal sets or nil
 //	apps, sorted by name, each:
-//	        name, cats or nil, implies or nil, info,
+//	        name, cats or nil, implies or nil,
+//	        requires, requiresCategory, excludes: count, then the items
+//	        info,
 //	        cookies, js and headers: count, then key and pattern index each
 //	        html, script, scriptSrc: pattern index lists
 //	        meta and dns: count, then key and pattern index list each
-//	        robots, certIssuer, css: pattern index lists
+//	        certIssuer, css, text, url: pattern index lists
 //	        dom: count, then each rule's selector index and checks: count,
-//	             then name and pattern index plus one (zero for nil) each
+//	             then name and pattern index each
 //
 // Identical patterns and selectors are stored once and shared.
 
@@ -90,6 +92,9 @@ func GenerateFingerprintsSource(fingerprintsJSON, categoriesJSON []byte) ([]byte
 	// pattern that only compiles bounded.
 	for _, raw := range dropped {
 		regex := strings.Split(raw, "\\;")[0]
+		if _, err := regexp.Compile("(?i)" + rewriteRegex(regex, false)); err == nil {
+			continue // dropped for its modifiers
+		}
 		if _, err := regexp.Compile("(?i)" + rewriteRegex(regex, true)); err == nil {
 			return nil, fmt.Errorf("pattern %q only compiles with bounded repeats", raw)
 		}
@@ -241,8 +246,23 @@ func encodeFingerprints(f *CompiledFingerprints) []encoder {
 			for _, s := range fp.implies {
 				e.str(s)
 			}
-			counts.implies += len(fp.implies)
+			counts.names += len(fp.implies)
 		}
+		e.uint(len(fp.requires))
+		for _, s := range fp.requires {
+			e.str(s)
+		}
+		counts.names += len(fp.requires)
+		e.uint(len(fp.requiresCategory))
+		for _, cat := range fp.requiresCategory {
+			e.uint(cat)
+		}
+		counts.cats += len(fp.requiresCategory)
+		e.uint(len(fp.excludes))
+		for _, s := range fp.excludes {
+			e.str(s)
+		}
+		counts.names += len(fp.excludes)
 		e.str(fp.info)
 		keyed := func(kps []keyedPattern) {
 			e.uint(len(kps))
@@ -275,20 +295,17 @@ func encodeFingerprints(f *CompiledFingerprints) []encoder {
 		list(fp.scriptSrc)
 		multiKeyed(fp.meta)
 		multiKeyed(fp.dns)
-		list(fp.robots)
 		list(fp.certIssuer)
 		list(fp.css)
+		list(fp.text)
+		list(fp.url)
 		e.uint(len(fp.dom))
 		for _, rule := range fp.dom {
 			e.uint(selector(rule.sel))
 			e.uint(len(rule.checks))
 			for _, check := range rule.checks {
 				e.str(check.name)
-				if check.pattern == nil {
-					e.uint(0)
-				} else {
-					e.uint(pattern(check.pattern) + 1)
-				}
+				e.uint(pattern(check.pattern))
 			}
 			counts.domChecks += len(rule.checks)
 		}
