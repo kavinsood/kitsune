@@ -1,0 +1,25 @@
+internal/profiler/fingerprints.go
+  s_0955b4e03e0b4e::t_f2623204909be3 301-330
+internal/profiler/lowered_test.go
+  s_0955b4e03e0b4e::t_e5fed215d11819 1-171
+internal/profiler/patterns.go
+  s_0955b4e03e0b4e::t_76182cf8cde310 7,27-33,180-344
+internal/profiler/prefilter.go
+  s_0955b4e03e0b4e::t_1d5926ff5df17d 7-8,49-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "56dc8bc46722d86d999be81e81d52bc1e681e510",
+  "prompts": {},
+  "sessions": {
+    "s_0955b4e03e0b4e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a469d9e381ce5ad60",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
