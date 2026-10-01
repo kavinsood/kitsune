@@ -1,0 +1,21 @@
+internal/profiler/fingerprint_dns_udp.go
+  s_42245fc56aa479::t_b2f0ae4f1ea5df 12-16,19-23,25-26,29-74,76-78,81-82
+internal/profiler/fingerprint_dns_udp_test.go
+  s_42245fc56aa479::t_f557ca8c7bf30e 1-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "add2c1a0b3b07efff6758acca8c843674d336a79",
+  "prompts": {},
+  "sessions": {
+    "s_42245fc56aa479": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0e4e633184b7e43c",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
