@@ -23,6 +23,12 @@ const (
 	// them and, as each is matched when it arrives and then dropped, the
 	// memory they take.
 	maxFetchedBytes = 16 << 20
+	// maxScripts and maxStyles bound how many scripts and stylesheets are
+	// fetched for a page, the first ones it links, so that a page linking
+	// thousands of tiny assets can't turn a scan into thousands of
+	// requests. Real pages link fewer (stripe.com, 77 scripts).
+	maxScripts = 100
+	maxStyles  = 20
 )
 
 // AssetURL represents an asset to be fetched with its type
@@ -47,6 +53,8 @@ type AssetFetcher struct {
 	semaphore  chan struct{}                   // Semaphore for limiting concurrent requests
 	dnsRecords map[string][]string             // Results from DNS lookups
 	added      map[string]bool                 // URLs added, guarded by mutex
+	scripts    int                             // Scripts added, guarded by mutex
+	styles     int                             // Stylesheets added, guarded by mutex
 
 	// Google tag containers (see gtm.go): the keys of those fetched, how
 	// many were found in the page rather than linked as scripts, and what
@@ -111,15 +119,21 @@ func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
 	}
 	// A page may link an asset more than once; fetch it once.
 	af.mutex.Lock()
-	seen := af.added[url]
+	if af.added[url] || assetType == "script" && af.scripts >= maxScripts || assetType == "style" && af.styles >= maxStyles {
+		af.mutex.Unlock()
+		return
+	}
 	if af.added == nil {
 		af.added = make(map[string]bool)
 	}
 	af.added[url] = true
-	af.mutex.Unlock()
-	if seen {
-		return
+	switch assetType {
+	case "script":
+		af.scripts++
+	case "style":
+		af.styles++
 	}
+	af.mutex.Unlock()
 	// Count the URL in wg before handing it over, so that a Wait after
 	// Stop can't return before it is fetched.
 	af.wg.Add(1)

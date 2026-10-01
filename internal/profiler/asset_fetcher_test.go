@@ -1,10 +1,14 @@
 package profiler
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 )
@@ -53,5 +57,39 @@ func TestReadString(t *testing.T) {
 		if left := budget.Load(); left != tt.budget-int64(len(got)) {
 			t.Errorf("%s: budget left %d, want %d", tt.name, left, tt.budget-int64(len(got)))
 		}
+	}
+}
+
+func TestAssetFetcherCaps(t *testing.T) {
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if strings.HasSuffix(r.URL.Path, ".css") {
+			w.Header().Set("Content-Type", "text/css")
+		} else {
+			w.Header().Set("Content-Type", "application/javascript")
+		}
+		io.WriteString(w, "x")
+	}))
+	defer srv.Close()
+
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	got := map[string]int{}
+	af := NewAssetFetcher(srv.URL+"/", context.Background(), &wg, 10, func(assetType, _ string) {
+		mu.Lock()
+		got[assetType]++
+		mu.Unlock()
+	})
+	af.Start()
+	for i := 0; i < 1000; i++ {
+		af.AddURL(fmt.Sprintf("%s/%d.js", srv.URL, i), "script", 0)
+		af.AddURL(fmt.Sprintf("%s/%d.css", srv.URL, i), "style", 0)
+		af.AddURL(srv.URL+"/0.js", "script", 0) // a repeat counts once
+	}
+	af.Stop()
+	wg.Wait()
+	if got["script"] != maxScripts || got["style"] != maxStyles || hits.Load() != maxScripts+maxStyles {
+		t.Errorf("fetched %d scripts, %d styles in %d requests; want %d, %d", got["script"], got["style"], hits.Load(), maxScripts, maxStyles)
 	}
 }
