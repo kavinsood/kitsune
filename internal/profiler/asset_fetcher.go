@@ -31,6 +31,13 @@ type AssetFetcher struct {
 	maxWorkers int                 // Maximum concurrent requests
 	semaphore  chan struct{}       // Semaphore for limiting concurrent requests
 	dnsRecords map[string][]string // Results from DNS lookups
+
+	// Google tag containers (see gtm.go): the keys of those fetched, how
+	// many were found in the page rather than linked as scripts, and what
+	// they are matched by.
+	gtmKeys       map[string]bool
+	gtmDiscovered int
+	gtm           []*gtmEvidence
 }
 
 // NewAssetFetcher creates a new AssetFetcher instance
@@ -51,6 +58,7 @@ func NewAssetFetcher(baseURL string, ctx context.Context, wg *sync.WaitGroup, ma
 		maxWorkers: maxWorkers,
 		semaphore:  make(chan struct{}, maxWorkers),
 		dnsRecords: make(map[string][]string),
+		gtmKeys:    make(map[string]bool),
 	}
 }
 
@@ -75,6 +83,12 @@ func (af *AssetFetcher) Stop() {
 // AddURL adds an asset URL to be fetched
 // This is a convenience method that can be used instead of sending directly to the channel
 func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
+	if assetType == "script" {
+		if key := googleTagKey(url); key != "" {
+			af.addGoogleTag(url, key, false)
+			return
+		}
+	}
 	// Count the URL in wg before handing it over, so that a Wait after
 	// Stop can't return before it is fetched.
 	af.wg.Add(1)
@@ -85,6 +99,42 @@ func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
 		// Context was cancelled, don't add more URLs
 		af.wg.Done()
 	}
+}
+
+// AddGTMContainer fetches the GTM container with the given id, found in the
+// page, unless it is already fetched or maxGTMContainers have been.
+func (af *AssetFetcher) AddGTMContainer(id string) {
+	af.addGoogleTag(gtmContainerURL(id), "gtm.js?id="+id, true)
+}
+
+// addGoogleTag fetches the Google tag container at rawURL as a "gtm" asset,
+// once per key. Containers don't go through urlChan, so they can be added
+// at any time before wg is waited on, even after Stop.
+func (af *AssetFetcher) addGoogleTag(rawURL, key string, discovered bool) {
+	af.mutex.Lock()
+	if af.gtmKeys[key] || discovered && af.gtmDiscovered >= maxGTMContainers {
+		af.mutex.Unlock()
+		return
+	}
+	af.gtmKeys[key] = true
+	if discovered {
+		af.gtmDiscovered++
+	}
+	af.mutex.Unlock()
+	if af.ctx.Err() != nil {
+		return
+	}
+	// Count it before starting it, so a Wait can't return first.
+	af.wg.Add(1)
+	go af.processURL(AssetURL{URL: rawURL, Type: "gtm", Priority: 5})
+}
+
+// GTMEvidence returns what the fetched containers are matched by. Call it
+// after wg is waited on.
+func (af *AssetFetcher) GTMEvidence() []*gtmEvidence {
+	af.mutex.Lock()
+	defer af.mutex.Unlock()
+	return af.gtm
 }
 
 // processURL handles fetching and processing of a single URL
@@ -115,7 +165,7 @@ func (af *AssetFetcher) processURL(assetURL AssetURL) {
 
 	// Add common headers
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5931.0 Safari/537.36")
-	if assetURL.Type == "script" {
+	if assetURL.Type == "script" || assetURL.Type == "gtm" {
 		req.Header.Set("Accept", "*/*")
 	} else if assetURL.Type == "style" {
 		req.Header.Set("Accept", "text/css,*/*;q=0.1")
@@ -134,6 +184,8 @@ func (af *AssetFetcher) processURL(assetURL AssetURL) {
 		af.handleScriptResponse(resp, assetURL.URL)
 	case "style":
 		af.handleStyleResponse(resp, assetURL.URL)
+	case "gtm":
+		af.handleGTMResponse(resp)
 	}
 }
 
@@ -170,6 +222,21 @@ func (af *AssetFetcher) handleScriptResponse(resp *http.Response, originalURL st
 	// Store the result
 	af.mutex.Lock()
 	(*af.jsContent)[originalURL] = content
+	af.mutex.Unlock()
+}
+
+// handleGTMResponse reads the configuration of a Google tag container.
+func (af *AssetFetcher) handleGTMResponse(resp *http.Response) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
+		return
+	}
+	c, err := readGTMContainer(resp.Body)
+	if err != nil {
+		return
+	}
+	ev := c.evidence()
+	af.mutex.Lock()
+	af.gtm = append(af.gtm, ev)
 	af.mutex.Unlock()
 }
 
