@@ -1,0 +1,19 @@
+internal/profiler/asset_fetcher.go
+  s_42245fc56aa479::t_19c7b8d5f0b1cf 62-63,78-80,86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b7867ce1abc84d198f5bae92670e0ac88d6eb8d4",
+  "prompts": {},
+  "sessions": {
+    "s_42245fc56aa479": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a0e4e633184b7e43c",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
