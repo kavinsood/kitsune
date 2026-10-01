@@ -90,9 +90,11 @@ func (c *compiler) selector(selector string) *domSelector {
 }
 
 // domRule compiles the checks of a dom selector. It reports false if any
-// check's regex doesn't compile: the rule is then dropped as a whole, since
-// dropping just that check would loosen the rule (to matching every element
-// the selector finds, if it was the only check).
+// check can't be evaluated (its regex doesn't compile, or it inspects
+// "properties", which are JS runtime values absent from static HTML): the
+// rule is then dropped as a whole, since dropping just that check would
+// loosen the rule (to matching every element the selector finds, if it was
+// the only check).
 func (c *compiler) domRule(selector string, raws map[string]interface{}) (domRule, bool) {
 	checks := make(map[string]*ParsedPattern)
 	for _, attr := range sortedKeys(raws) {
@@ -101,16 +103,18 @@ func (c *compiler) domRule(selector string, raws map[string]interface{}) (domRul
 		case "exists":
 			// Just the existence is enough, no need for pattern matching
 			checks[attr] = nil
+		case "properties":
+			return domRule{}, false
 		case "attributes":
 			// Process attribute patterns
 			attrMap, ok := value.(map[string]interface{})
 			if !ok {
-				continue
+				return domRule{}, false
 			}
 			for _, attrName := range sortedKeys(attrMap) {
 				patternStr, ok := attrMap[attrName].(string)
 				if !ok {
-					continue
+					return domRule{}, false
 				}
 				p := c.pattern(patternStr, false)
 				if p == nil {
@@ -123,7 +127,7 @@ func (c *compiler) domRule(selector string, raws map[string]interface{}) (domRul
 			// matching (like "href", "id", "class")
 			patternStr, ok := value.(string)
 			if !ok {
-				continue
+				return domRule{}, false
 			}
 			p := c.pattern(patternStr, false)
 			if p == nil {

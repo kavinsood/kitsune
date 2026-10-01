@@ -142,14 +142,16 @@ func TestNewFromFile(t *testing.T) {
 }
 
 // TestDOMRuleWithBadRegexDropped checks that a dom rule is dropped as a
-// whole when one of its checks' regexes doesn't compile, rather than losing
-// just that check and matching every element the selector finds.
+// whole when one of its checks can't be evaluated (a regex that doesn't
+// compile, or JS "properties"), rather than losing just that check and
+// matching every element the selector finds.
 func TestDOMRuleWithBadRegexDropped(t *testing.T) {
 	f, dropped := compileFingerprints(map[string]*Fingerprint{"App": {Dom: map[string]map[string]interface{}{
 		"style":  {"text": "/sites/(?!default/)"},
 		"a[x]":   {"attributes": map[string]interface{}{"href": "ok", "title": "(?!bad)"}},
 		"link":   {"exists": ""},
 		"script": {"text": "fine"},
+		"body":   {"properties": map[string]interface{}{"__k": ""}},
 	}}})
 	var got []string
 	for _, rule := range f.Apps[0].dom {
