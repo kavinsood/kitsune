@@ -17,6 +17,11 @@ var DNSRecordTypes = []uint16{
 	dns.TypeCNAME,
 }
 
+// LookupDNS returns the DNS records of a page's host, keyed by record type.
+// It is checkDNS, and can be replaced to serve recorded records: the
+// evaluation harness (cmd/kitsune-eval) does, to run offline.
+var LookupDNS = checkDNS
+
 // checkDNS performs DNS lookups for the given domain and returns the results
 func checkDNS(domain string) map[string][]string {
 	results := make(map[string][]string)
@@ -65,7 +70,7 @@ func checkDNSWithContext(ctx context.Context, domain string) map[string][]string
 	
 	// Start the DNS checking in a goroutine
 	go func() {
-		resultChan <- checkDNS(domain)
+		resultChan <- LookupDNS(domain)
 	}()
 	
 	// Wait for either the context to be done or the result to arrive
