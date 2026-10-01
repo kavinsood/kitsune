@@ -45,3 +45,6 @@ Thumbs.db
 # Local tooling
 .cloudflare/
 .claude/worktrees/
+
+# Page snapshots and results of cmd/kitsune-eval
+/cmd/kitsune-eval/cache*/

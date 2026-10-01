@@ -176,6 +176,8 @@ Useful flags:
 
 To fix a tech, edit `assets/overrides.json` rather than the generated JSON.
 
+To measure a change, run `go run ./cmd/kitsune-eval -tag before` before it and `go run ./cmd/kitsune-eval -compare before` after it. This scores detection on two labeled sets of pages, served from a local snapshot. See [cmd/kitsune-eval/README.md](cmd/kitsune-eval/README.md), and its note on snapshot drift.
+
 For a deep dive into the engineering decisions, see [DESIGN.md](DESIGN.md).
 
 ### Contributing

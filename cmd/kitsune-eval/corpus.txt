@@ -1,0 +1,47 @@
+# Corpus eval sites: a host, fetched at https://<host>/, then the techs
+# expected on it, comma-separated (none if omitted).
+nextjs.org Next.js,React,Vercel
+vercel.com Next.js,React,Vercel
+nuxt.com Nuxt.js,Vue.js
+astro.build Astro
+svelte.dev SvelteKit,Svelte
+remix.run Remix,React
+react.dev React,Next.js
+vuejs.org Vue.js,VitePress
+angular.dev Angular
+www.allbirds.com Shopify
+www.gymshark.com Shopify
+wordpress.org WordPress
+techcrunch.com WordPress
+webflow.com Webflow
+framer.com Framer Sites
+www.wix.com Wix
+www.squarespace.com Squarespace
+www.netlify.com Netlify
+www.cloudflare.com Cloudflare
+www.fastly.com Fastly
+www.akamai.com Akamai
+stripe.com Stripe
+www.hubspot.com HubSpot
+tailwindcss.com Tailwind CSS
+getbootstrap.com Bootstrap
+jquery.com jQuery
+docusaurus.io Docusaurus,React
+www.gatsbyjs.com Gatsby
+gohugo.io Hugo
+ghost.org Ghost
+www.drupal.org Drupal
+laravel.com Laravel
+dev.to Ruby on Rails
+www.djangoproject.com Django
+htmx.org Htmx
+alpinejs.dev Alpine.js
+segment.com Segment
+www.hotjar.com Hotjar
+www.intercom.com Intercom
+github.com
+example.com
+www.mozilla.org Django
+www.whitehouse.gov WordPress
+www.nytimes.com React
+www.theguardian.com React
