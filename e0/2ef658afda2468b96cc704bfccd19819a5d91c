@@ -1,0 +1,19 @@
+internal/profiler/fingerprint_dns.go
+  s_1f22345d1097d4::t_5c02c9992850af 20-24,73
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e02ef658afda2468b96cc704bfccd19819a5d91c",
+  "prompts": {},
+  "sessions": {
+    "s_1f22345d1097d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-acd29439ce99f9d38",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
