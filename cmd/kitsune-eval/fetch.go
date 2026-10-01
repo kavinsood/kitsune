@@ -33,8 +33,11 @@ const (
 // lookupDNS queries DNS; runs replace profiler.LookupDNS.
 var lookupDNS = profiler.LookupDNS
 
-// complete downloads the pages missing from the cache, and records the
-// assets and DNS records of those that don't have them.
+// complete downloads the pages missing from the cache, records the DNS
+// records of those that don't have them, and records the assets the
+// engine now fetches that the cache doesn't have: recorded pages are
+// analyzed again, as an engine change can fetch more of their assets.
+// Assets already recorded are served from the cache, not downloaded.
 func (c *cache) complete(engine *profiler.Wappalyze, l *labels) error {
 	type job struct {
 		set, name, url string
@@ -46,9 +49,7 @@ func (c *cache) complete(engine *profiler.Wappalyze, l *labels) error {
 		if err != nil {
 			return err
 		}
-		if p == nil || !p.Recorded {
-			jobs = append(jobs, &job{set: set, name: name, url: url, p: p})
-		}
+		jobs = append(jobs, &job{set: set, name: name, url: url, p: p})
 		return nil
 	}
 	for _, s := range l.corpus {
@@ -99,7 +100,6 @@ func (c *cache) complete(engine *profiler.Wappalyze, l *labels) error {
 		})
 	}
 
-	fmt.Fprintf(os.Stderr, "recording the assets and DNS records of %d pages\n", len(jobs))
 	rec := &recorder{
 		store:    c.assets,
 		client:   &http.Client{Transport: realTransport, Timeout: 30 * time.Second},
@@ -122,6 +122,10 @@ func (c *cache) complete(engine *profiler.Wappalyze, l *labels) error {
 		}
 	})
 	http.DefaultTransport, profiler.LookupDNS = oldTransport, oldDNS
+	if len(fetch) == 0 && rec.recorded() == 0 && failed == 0 {
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "recorded %d new assets\n", rec.recorded())
 	if err := c.assets.save(); err != nil {
 		return err
 	}
@@ -184,13 +188,14 @@ func fetchPage(client *http.Client, rawURL string) (*page, error) {
 	}, nil
 }
 
-// recordPage saves the DNS records of p's host into p (truth pages), and
+// recordPage saves the DNS records of p's host into p (truth pages not
+// yet recorded), and
 // the assets its analysis fetches into rec's store. Assets are recorded in
 // full even if the analysis gives up on them, and those it didn't get to
 // before its timeout are fetched by the next analysis, which gets the
 // recorded ones at once, until a pass adds none.
 func recordPage(engine *profiler.Wappalyze, rec *recorder, set string, p *page) error {
-	if set == "truth" {
+	if set == "truth" && !p.Recorded {
 		u, err := url.Parse(p.Final)
 		if err != nil {
 			return err

@@ -21,7 +21,7 @@ go run ./cmd/kitsune-eval fetch -refresh      # download a new snapshot
 
 ## The snapshot
 
-The first run downloads the pages, their DNS records and every asset the engine requests while analyzing them into `cache/` (git-ignored, about 130 MB). That takes about a minute. Every later run is served from it, with no network access: assets the snapshot lacks are served as 404s, and their count is printed. Pages that failed to download are retried on the next run that isn't `-offline`.
+The first run downloads the pages, their DNS records and every asset the engine requests while analyzing them into `cache/` (git-ignored, about 130 MB). That takes about a minute. Every later run is served from it. Before analyzing, a run that isn't `-offline` downloads only what the snapshot lacks: pages that failed to download, and assets the engine now requests that it didn't when the pages were recorded (after a change that fetches more of them, such as preloaded scripts). Those assets are as of that run, not of the snapshot. The analysis itself has no network access: assets the snapshot lacks are served as 404s, and their count is printed.
 
 ```
 cache/snapshot.json        when the snapshot was taken
