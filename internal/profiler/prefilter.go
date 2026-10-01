@@ -4,6 +4,8 @@ import (
 	"regexp/syntax"
 	"sort"
 	"strings"
+	"unicode/utf8"
+	"unsafe"
 )
 
 // Literal prefiltering.
@@ -42,6 +44,39 @@ func prefilterInput(s string) string {
 		lowered = strings.ReplaceAll(lowered, foldHazard, "s")
 	}
 	return lowered
+}
+
+// asciiLower returns s with its ASCII letters lowercased, so offsets in it
+// are offsets in s, and whether s has a foldHazard: 'ſ' or the Kelvin sign
+// 'K', which a case-insensitive regex matches as 's' or 'k'. For a string
+// without them it can stand in for prefilterInput, as prefilter literals
+// are ASCII (see requiredLiterals), and the lowered regexes of patterns
+// match it (see ParsedPattern.loweredRe).
+func asciiLower(s string) (lowered string, hazard bool) {
+	i := 0
+	for ; i < len(s); i++ {
+		if c := s[i]; 'A' <= c && c <= 'Z' || c >= utf8.RuneSelf {
+			break
+		}
+	}
+	if i == len(s) {
+		return s, false
+	}
+	b := make([]byte, len(s))
+	copy(b, s[:i])
+	for ; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case 'A' <= c && c <= 'Z':
+			c += 'a' - 'A'
+		case c == 0xc5: // ſ is C5 BF
+			hazard = hazard || i+1 < len(s) && s[i+1] == 0xbf
+		case c == 0xe2: // K is E2 84 AA
+			hazard = hazard || i+2 < len(s) && s[i+1] == 0x84 && s[i+2] == 0xaa
+		}
+		b[i] = c
+	}
+	return unsafe.String(&b[0], len(b)), hazard
 }
 
 // literalSets lists literal sets that are each required by a regex: every

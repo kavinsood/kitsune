@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"regexp/syntax"
 	"strconv"
 	"strings"
 	"sync"
@@ -23,6 +24,13 @@ type ParsedPattern struct {
 	// literals are lowercase literals required by regex: it can only match
 	// a target if strings.ToLower(target) contains them. See prefilter.go.
 	literals literalSets
+	// lowered is regex for ASCII-lowercased targets, compiled on first use
+	// (see loweredRe).
+	loweredOnce sync.Once
+	lowered     *regexp.Regexp
+	// hazardLowered is lowered for targets with foldHazards.
+	hazardOnce    sync.Once
+	hazardLowered *regexp.Regexp
 
 	Confidence int
 	Version    string
@@ -165,6 +173,171 @@ func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, st
 	}
 	if len(submatches) == 0 {
 		return false, ""
+	}
+	return true, p.extractVersion(submatches)
+}
+
+// loweredRe returns the form of p's regex that matches asciiLower(target)
+// exactly where the regex matches target, with the same submatch offsets,
+// or nil if p has none. Unless hazard is set it is only valid for targets
+// without foldHazards. It is safe for concurrent use.
+//
+// The regex is case-insensitive, so Go's regexp can't use a literal prefix
+// to skip ahead with strings.Index, and steps its NFA over every byte of
+// the target. The lowered form is case-sensitive, with its ASCII literals
+// lowercased, so a literal prefix is searched for directly; on large
+// inputs that is many times faster.
+func (p *ParsedPattern) loweredRe(hazard bool) *regexp.Regexp {
+	if hazard {
+		p.hazardOnce.Do(func() {
+			if p.src != "" {
+				p.hazardLowered = lowerRegex(p.src, true)
+			}
+		})
+		return p.hazardLowered
+	}
+	p.loweredOnce.Do(func() {
+		if p.src != "" {
+			p.lowered = lowerRegex(p.src, false)
+		}
+	})
+	return p.lowered
+}
+
+// lowerRegex returns a regex that matches asciiLower(s) where expr matches
+// s, for every s (or, unless hazard is set, every s without foldHazards),
+// or nil if there is none it can build: if expr has case-sensitive ASCII
+// letters, as in (?-i:...), which lowering s would make match where they
+// didn't.
+//
+// Case-insensitive ASCII literals become lowercase case-sensitive ones.
+// Character classes, which syntax.Parse already closes under case folding
+// where the regex is case-insensitive, and non-ASCII case-insensitive
+// literals are kept: on input where only ASCII letters were lowered they
+// match where they did. Two ASCII letters also fold to non-ASCII runes,
+// which asciiLower leaves alone: 's' to 'ſ' and 'k' to the Kelvin sign
+// 'K'. The lowered literals no longer match those, so with hazard set
+// their 's' and 'k' become the classes [sſ] and [kK], which still leaves
+// a literal prefix up to the first of them.
+func lowerRegex(expr string, hazard bool) *regexp.Regexp {
+	re, err := syntax.Parse(expr, syntax.Perl)
+	if err != nil || !lowerSyntax(re, hazard) {
+		return nil
+	}
+	lowered, err := regexp.Compile(re.String())
+	if err != nil {
+		return nil
+	}
+	return lowered
+}
+
+// lowerSyntax rewrites re as lowerRegex describes, reporting false if it
+// can't.
+func lowerSyntax(re *syntax.Regexp, hazard bool) bool {
+	switch re.Op {
+	case syntax.OpLiteral:
+		fold := re.Flags&syntax.FoldCase != 0
+		ascii := true
+		for _, r := range re.Rune {
+			if r >= utf8.RuneSelf {
+				ascii = false
+			} else if !fold && isASCIILetter(r) {
+				return false
+			}
+		}
+		if fold && ascii {
+			for i, r := range re.Rune {
+				if 'A' <= r && r <= 'Z' {
+					re.Rune[i] = r + 'a' - 'A'
+				}
+			}
+			re.Flags &^= syntax.FoldCase
+			if hazard {
+				splitFoldHazards(re)
+			}
+			return true
+		}
+	case syntax.OpCharClass:
+		// Every ASCII letter must be in the class iff its other case is.
+		var in [128]bool
+		for i := 0; i+1 < len(re.Rune); i += 2 {
+			for r := re.Rune[i]; r <= re.Rune[i+1] && r < utf8.RuneSelf; r++ {
+				in[r] = true
+			}
+		}
+		for c := 'a'; c <= 'z'; c++ {
+			if in[c] != in[c-'a'+'A'] {
+				return false
+			}
+		}
+	}
+	for _, sub := range re.Sub {
+		if !lowerSyntax(sub, hazard) {
+			return false
+		}
+	}
+	return true
+}
+
+// splitFoldHazards turns re, a case-sensitive lowercase literal, into a
+// concatenation of literals and the classes [sſ] and [kK] for its 's' and
+// 'k', if it has any.
+func splitFoldHazards(re *syntax.Regexp) {
+	if !strings.ContainsAny(string(re.Rune), "sk") {
+		return
+	}
+	var subs []*syntax.Regexp
+	var run []rune
+	flush := func() {
+		if len(run) > 0 {
+			subs = append(subs, &syntax.Regexp{Op: syntax.OpLiteral, Flags: re.Flags, Rune: run})
+			run = nil
+		}
+	}
+	for _, r := range re.Rune {
+		var class []rune
+		switch r {
+		case 's':
+			class = []rune{'s', 's', 'ſ', 'ſ'}
+		case 'k':
+			class = []rune{'k', 'k', 'K', 'K'}
+		default:
+			run = append(run, r)
+			continue
+		}
+		flush()
+		subs = append(subs, &syntax.Regexp{Op: syntax.OpCharClass, Flags: re.Flags, Rune: class})
+	}
+	flush()
+	if len(subs) == 1 {
+		*re = *subs[0]
+		return
+	}
+	*re = syntax.Regexp{Op: syntax.OpConcat, Flags: re.Flags, Sub: subs}
+}
+
+func isASCIILetter(r rune) bool { return 'a' <= r && r <= 'z' || 'A' <= r && r <= 'Z' }
+
+// evaluateLowered is Evaluate for a target given with its asciiLower form,
+// and whether target has foldHazards.
+func (p *ParsedPattern) evaluateLowered(target, lowered string, hazard bool, timeout time.Duration) (bool, string) {
+	re := p.loweredRe(hazard)
+	if re == nil || !unboundedRepeats {
+		return p.Evaluate(target, timeout)
+	}
+	loc := re.FindStringSubmatchIndex(lowered)
+	if loc == nil {
+		return false, ""
+	}
+	if p.Version == "" {
+		return true, ""
+	}
+	// Take the submatches from target, so versions keep their case.
+	submatches := make([]string, len(loc)/2)
+	for i := range submatches {
+		if loc[2*i] >= 0 {
+			submatches[i] = target[loc[2*i]:loc[2*i+1]]
+		}
 	}
 	return true, p.extractVersion(submatches)
 }

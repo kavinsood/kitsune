@@ -298,6 +298,36 @@ func patternsOf(fingerprint *CompiledFingerprint, part part) []*ParsedPattern {
 func (f *CompiledFingerprints) matchString(data string, part part, timeout time.Duration) []matchPartResult {
 	var technologies []matchPartResult
 
+	// Large inputs (fetched scripts and stylesheets, HTML) are lowered once,
+	// for the literal scan and for the patterns' lowered regexes, which
+	// are much faster on them than the case-insensitive ones (see
+	// ParsedPattern.loweredRe).
+	if len(data) >= minScanLen && unboundedRepeats {
+		lowered, hazard := asciiLower(data)
+		// Prefilter literals are ASCII, so asciiLower can stand in for
+		// prefilterInput unless data has foldHazards, which a
+		// case-insensitive match takes for ASCII letters.
+		pre := lowered
+		if hazard {
+			pre = prefilterInput(data)
+		}
+		has := func(lit string) bool { return strings.Contains(pre, lit) }
+		if m := f.literalMatcher(part); m != nil {
+			has = m.scan(pre)
+		}
+		for _, fingerprint := range f.Apps {
+			for _, pattern := range patternsOf(fingerprint, part) {
+				if !pattern.mayMatch(has) {
+					continue
+				}
+				if valid, version := pattern.evaluateLowered(data, lowered, hazard, timeout); valid {
+					technologies = append(technologies, newMatch(fingerprint.name, pattern, version))
+				}
+			}
+		}
+		return technologies
+	}
+
 	// Lowercase once so each pattern's literal prefilter can rule the input
 	// out without running the regex.
 	lowered := prefilterInput(data)
