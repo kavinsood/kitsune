@@ -35,9 +35,22 @@ type ResponseCategory struct {
 
 // The final response payload
 type AnalyzeResponse struct {
-	URL          string               `json:"url"`
+	URL string `json:"url"`
+	// FinalURL is the URL the page was served from after redirects, if
+	// that is not URL.
+	FinalURL     string               `json:"final_url,omitempty"`
 	Technologies []ResponseTechnology `json:"technologies"` // A flat list for the "All" view
 	Categories   []ResponseCategory   `json:"categories"`   // The grouped list
+}
+
+// BlockedResponse is the payload for a site that blocked the scanner. The
+// technologies are only those its response headers and cookies show.
+type BlockedResponse struct {
+	Error   bool   `json:"error"`
+	Blocked bool   `json:"blocked"`
+	Status  int    `json:"status"`
+	Message string `json:"message"`
+	AnalyzeResponse
 }
 
 // Metrics is logged as one JSON line per request so tail consumers can parse it.
@@ -126,66 +139,38 @@ func NewMux(engine *profiler.Wappalyze) *http.ServeMux {
 		}
 		fetched := time.Now()
 
-		if reason := blockReason(resp.StatusCode, body); reason != "" {
+		// Analyze the page at the URL it was served from: relative script
+		// and stylesheet URLs resolve against it, and url patterns match it.
+		pageURL := targetURL
+		if resp.Request != nil && resp.Request.URL != nil {
+			pageURL = resp.Request.URL.String()
+		}
+
+		if reason := blockReason(resp.StatusCode, resp.Header, body); reason != "" {
 			log.Printf(`{"event":"blocked","url":%q,"status":%d,"server":%q,"reason":%q}`, targetURL, resp.StatusCode, resp.Header.Get("Server"), reason)
+			// The block page isn't the site, but its headers and cookies
+			// usually still come from the site's stack (its CDN, say).
+			// Those of an isolation page come from the isolation service.
+			var results map[string]profiler.AppInfo
+			if reason != reasonIsolation {
+				results = engine.FingerprintWithInfoAndURL(resp.Header, nil, pageURL)
+			}
+			blocked := BlockedResponse{
+				Error:           true,
+				Blocked:         true,
+				Status:          resp.StatusCode,
+				Message:         fmt.Sprintf("This site blocked our scanner (%s), so we couldn't analyze it.", reason),
+				AnalyzeResponse: newAnalyzeResponse(targetURL, pageURL, results),
+			}
 			// The frontend renders {error, message} responses as an error.
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{
-				"error":   true,
-				"blocked": true,
-				"status":  resp.StatusCode,
-				"message": fmt.Sprintf("This site blocked our scanner (%s), so we couldn't analyze it.", reason),
-			})
+			json.NewEncoder(w).Encode(blocked)
 			return
 		}
 
-		// Perform fingerprinting with detailed info
-		results := engine.FingerprintWithInfoAndURL(resp.Header, body, targetURL)
+		results := engine.FingerprintWithInfoAndURL(resp.Header, body, pageURL)
 		analyzed := time.Now()
-
-		// Data structures to build the response
-		allTechs := make([]ResponseTechnology, 0, len(results))
-		categoriesMap := make(map[string][]ResponseTechnology)
-
-		// Iterate once, build all structures
-		for techName, info := range results {
-			tech := ResponseTechnology{
-				Name:        techName,
-				Description: info.Description,
-				Website:     info.Website,
-			}
-			allTechs = append(allTechs, tech)
-
-			if len(info.Categories) > 0 {
-				for _, catName := range info.Categories {
-					categoriesMap[catName] = append(categoriesMap[catName], tech)
-				}
-			} else {
-				// Group tech without categories into a default one
-				categoriesMap["Miscellaneous"] = append(categoriesMap["Miscellaneous"], tech)
-			}
-		}
-
-		// Convert the map to the final slice for JSON serialization
-		categoryList := make([]ResponseCategory, 0, len(categoriesMap))
-		for catName, techs := range categoriesMap {
-			categoryList = append(categoryList, ResponseCategory{
-				Category:     catName,
-				Technologies: techs,
-			})
-		}
-
-		// Sort categories for deterministic output
-		sort.Slice(categoryList, func(i, j int) bool {
-			return categoryList[i].Category < categoryList[j].Category
-		})
-
-		// Build the final response object
-		response := AnalyzeResponse{
-			URL:          targetURL,
-			Technologies: allTechs,
-			Categories:   categoryList,
-		}
+		response := newAnalyzeResponse(targetURL, pageURL, results)
 
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
@@ -198,7 +183,7 @@ func NewMux(engine *profiler.Wappalyze) *http.ServeMux {
 			Status:      resp.StatusCode,
 			Server:      resp.Header.Get("Server"),
 			BodyBytes:   len(body),
-			Techs:       len(allTechs),
+			Techs:       len(response.Technologies),
 			HeapAllocMB: m.HeapAlloc >> 20,
 			HeapSysMB:   m.HeapSys >> 20,
 			SysMB:       m.Sys >> 20,
@@ -225,6 +210,53 @@ func NewMux(engine *profiler.Wappalyze) *http.ServeMux {
 	return mux
 }
 
+// newAnalyzeResponse returns the response for the techs detected on the
+// page at targetURL, served from pageURL.
+func newAnalyzeResponse(targetURL, pageURL string, results map[string]profiler.AppInfo) AnalyzeResponse {
+	allTechs := make([]ResponseTechnology, 0, len(results))
+	categoriesMap := make(map[string][]ResponseTechnology)
+	for techName, info := range results {
+		tech := ResponseTechnology{
+			Name:        techName,
+			Description: info.Description,
+			Website:     info.Website,
+		}
+		allTechs = append(allTechs, tech)
+
+		if len(info.Categories) > 0 {
+			for _, catName := range info.Categories {
+				categoriesMap[catName] = append(categoriesMap[catName], tech)
+			}
+		} else {
+			// Group tech without categories into a default one
+			categoriesMap["Miscellaneous"] = append(categoriesMap["Miscellaneous"], tech)
+		}
+	}
+	sort.Slice(allTechs, func(i, j int) bool { return allTechs[i].Name < allTechs[j].Name })
+
+	categoryList := make([]ResponseCategory, 0, len(categoriesMap))
+	for catName, techs := range categoriesMap {
+		sort.Slice(techs, func(i, j int) bool { return techs[i].Name < techs[j].Name })
+		categoryList = append(categoryList, ResponseCategory{
+			Category:     catName,
+			Technologies: techs,
+		})
+	}
+	sort.Slice(categoryList, func(i, j int) bool {
+		return categoryList[i].Category < categoryList[j].Category
+	})
+
+	response := AnalyzeResponse{
+		URL:          targetURL,
+		Technologies: allTechs,
+		Categories:   categoryList,
+	}
+	if pageURL != targetURL {
+		response.FinalURL = pageURL
+	}
+	return response
+}
+
 // challengeMarkers identify bot-challenge pages served in place of the site.
 var challengeMarkers = []string{
 	"<title>Just a moment...</title>", // Cloudflare
@@ -233,15 +265,26 @@ var challengeMarkers = []string{
 	"captcha-delivery.com",         // DataDome
 	"px-captcha",                   // PerimeterX
 	"<title>Access Denied</title>", // Akamai
+	// Fastly's bot challenge (seen on drupal.org), served with status 200.
+	"<title>Client Challenge</title>",
 }
+
+// reasonIsolation is the block reason for a browser isolation page.
+const reasonIsolation = "browser isolation"
 
 // blockReason reports why a response looks like a block rather than the
 // site itself, or "" if it doesn't.
-func blockReason(status int, body []byte) string {
+func blockReason(status int, header http.Header, body []byte) string {
 	switch status {
 	case http.StatusUnauthorized, http.StatusForbidden, http.StatusProxyAuthRequired,
 		419, http.StatusTooManyRequests, http.StatusServiceUnavailable:
 		return fmt.Sprintf("HTTP %d", status)
+	}
+	// Cloudflare Browser Isolation serves its own page in place of the
+	// site's, marked with this header, which loads the isolated site with
+	// scripts from content.browser.run.
+	if header.Get("Cf-Biso-Version") != "" || isolationPage(body) {
+		return reasonIsolation
 	}
 	// Challenge pages are small; don't scan real pages that happen to
 	// mention a marker.
@@ -253,4 +296,12 @@ func blockReason(status int, body []byte) string {
 		}
 	}
 	return ""
+}
+
+// isolationPage reports whether body is a Cloudflare Browser Isolation
+// interstitial: an untitled page loading scripts from content.browser.run.
+func isolationPage(body []byte) bool {
+	return len(body) < 64<<10 &&
+		bytes.Contains(body, []byte("://content.browser.run/")) &&
+		!bytes.Contains(bytes.ToLower(body), []byte("<title"))
 }
