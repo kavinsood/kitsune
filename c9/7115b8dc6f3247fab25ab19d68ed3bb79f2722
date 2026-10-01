@@ -1,0 +1,23 @@
+internal/profiler/pipeline.go
+  s_0955b4e03e0b4e::t_c653487b225477 45-55
+internal/profiler/asset_fetcher.go
+  s_0955b4e03e0b4e::t_3604b1dd68e3f1 10,12-24,37-48,51-55,61,67,72-73,97-107,120,123-127,129-131,137-140,146,152,157-159,161-162,164-166,171,175-178,180-183,208-214,217,220-224,227-234,236-239,243-245,247,251-265
+internal/profiler/asset_fetcher_test.go
+  s_0955b4e03e0b4e::t_ba614e970124e4 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c97115b8dc6f3247fab25ab19d68ed3bb79f2722",
+  "prompts": {},
+  "sessions": {
+    "s_0955b4e03e0b4e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a469d9e381ce5ad60",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
