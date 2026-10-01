@@ -1,0 +1,21 @@
+internal/profiler/corpus_bench_test.go
+  s_0955b4e03e0b4e::t_fba6c9d944612e 13-14,43-46,63-69,91,189
+internal/profiler/fetched_js_bench_test.go
+  s_0955b4e03e0b4e::t_ad4534b06b426e 1-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6e2ed5c02740d7ba6850e68d51fc623f77f6db74",
+  "prompts": {},
+  "sessions": {
+    "s_0955b4e03e0b4e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a469d9e381ce5ad60",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
