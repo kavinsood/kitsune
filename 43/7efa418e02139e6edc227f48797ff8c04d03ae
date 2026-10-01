@@ -1,0 +1,37 @@
+.gitignore
+  s_1f22345d1097d4::t_723057ef4b578f 48-50
+cmd/kitsune-eval/corpus.txt
+  s_1f22345d1097d4::t_53b6174513525b 1-47
+cmd/kitsune-eval/truth.json
+  s_1f22345d1097d4::t_953793fcf406bf 1-39
+README.md
+  s_1f22345d1097d4::t_cf0ca09221d518 179-180
+cmd/kitsune-eval/README.md
+  s_1f22345d1097d4::t_8a88eaf82dab47 1-53
+cmd/kitsune-eval/cache.go
+  s_1f22345d1097d4::t_87b060c2bd930d 1-284
+cmd/kitsune-eval/eval_test.go
+  s_1f22345d1097d4::t_7224ceae86ccb7 1-217
+cmd/kitsune-eval/fetch.go
+  s_1f22345d1097d4::t_9b7f647d919dfe 1-444
+cmd/kitsune-eval/main.go
+  s_1f22345d1097d4::t_f21c5cb29010a9 1-235
+cmd/kitsune-eval/score.go
+  s_1f22345d1097d4::t_b0498781abe6b3 1-352
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "437efa418e02139e6edc227f48797ff8c04d03ae",
+  "prompts": {},
+  "sessions": {
+    "s_1f22345d1097d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-acd29439ce99f9d38",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
