@@ -9425,6 +9425,12 @@
             "js": {
                 "axios.get": ""
             },
+            "scripts": [
+                "=\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[,;]\\s*(?:(?:const|let|var)\\s+)?[\\w$]+\\s*=\\s*\\{\\}\\s*[,;]\\s*\\[[\"']object[\"']\\s*,\\s*[\"']boolean[\"']\\s*,\\s*[\"']number[\"']\\s*,\\s*[\"']function[\"']\\s*,\\s*[\"']string[\"']\\s*,\\s*[\"']symbol[\"']\\]\\.forEach\\;version:\\1",
+                "\\.name\\s*=\\s*[\"']AxiosError[\"']",
+                "\\{\"name\":\"axios\",\"version\":\"(\\d+\\.\\d+\\.\\d+)\"\\;version:\\1",
+                "isAxiosError[\"']?\\s*(?:=|,\\s*\\{\\s*value\\s*:)\\s*(?:!0|true)\\b"
+            ],
             "scriptSrc": [
                 "/axios(@|/)([\\d.]+)(?:/[a-z]+)?/axios(?:.min)?\\.js\\;version:\\2"
             ],
@@ -55711,6 +55717,10 @@
                 "_.differenceBy": "",
                 "_.templateSettings.imports._.templateSettings.imports._.VERSION": "^(.+)$\\;version:\\1"
             },
+            "scripts": [
+                "[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[,;]\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*200\\s*[,;]\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*[\"']Unsupported core-js use\\;version:\\1",
+                "__lodash_hash_undefined__"
+            ],
             "scriptSrc": [
                 "lodash.*\\.js"
             ],
@@ -62163,6 +62173,11 @@
                 "moment": "",
                 "moment.version": "^(.+)$\\;version:\\1"
             },
+            "scripts": [
+                "\\._isAMomentObject\\s*=\\s*[\\w$]+\\._isAMomentObject",
+                "\\.version\\s*=\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[;,]\\s*[\\w$]+\\([\\w$]+\\)\\s*[;,]\\s*[\\w$]+\\.fn\\s*=\\s*[\\w$]+\\s*[;,]\\s*[\\w$]+\\.min\\s*=\\;version:\\1",
+                "moment construction falls back to js Date\\(\\)"
+            ],
             "scriptSrc": [
                 "moment(?:\\.min)?\\.js"
             ],
@@ -64867,8 +64882,7 @@
             ],
             "implies": [
                 "Node.js",
-                "React",
-                "Webpack"
+                "React"
             ],
             "description": "Next.js is a React framework for server-rendered, statically generated, and full-stack web applications.",
             "website": "https://nextjs.org",
@@ -80133,8 +80147,11 @@
             ],
             "scripts": [
                 "@license React\\s.{0,80}react(?:\\.production(?:\\.min)?|\\.development)?\\.js",
+                "__reactFiber\\$[\"']\\s*\\+\\s*[\\w$]+\\s*,\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*[\"']__reactProps\\$[\"']",
+                "bundleType\\s*:\\s*[01]\\s*,\\s*version\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+[\\w.-]*)[\"']\\s*,\\s*rendererPackageName\\s*:\\s*[\"']react-dom[\"']\\;version:\\1",
                 "https://react\\.dev/errors/.{0,250}Minified React error #",
-                "react\\.js"
+                "react\\.js",
+                "reactjs\\.org/docs/error-decoder\\.html\\?invariant="
             ],
             "scriptSrc": [
                 "/([\\d\\.]+)/react(?:\\.min)?\\.js\\;version:\\1",
@@ -81115,6 +81132,9 @@
                 "Redux.applyMiddleware": "",
                 "__REDUX_DEVTOOLS_EXTENSION__": ""
             },
+            "scripts": [
+                "@@redux/INIT"
+            ],
             "scriptSrc": [
                 "/redux(@|/)([\\d.]+)(?:/[a-z]+)?/redux(?:.min)?\\.js\\;version:\\2"
             ],
@@ -87548,6 +87568,9 @@
             "html": [
                 "<script[^>]*>\\s*Raven\\.config\\('[^']*', \\{\\s+release: '([0-9\\.]+)'\\;version:\\1",
                 "<script[^>]*src=\"[^\"]*browser\\.sentry\\-cdn\\.com/([0-9.]+)/bundle(?:\\.tracing)?(?:\\.min)?\\.js\\;version:\\1"
+            ],
+            "scripts": [
+                "\\.__SENTRY__\\s*=\\s*[\\w$.]+\\.__SENTRY__\\s*\\|\\|"
             ],
             "scriptSrc": [
                 "\\.sentry-cdn\\.com/",
@@ -101421,6 +101444,10 @@
                 "THREE.REVISION": "^(.+)$\\;version:\\1",
                 "__THREE__": "^(.+)$\\;version:\\1"
             },
+            "scripts": [
+                "Multiple instances of Three\\.js being imported",
+                "__THREE_DEVTOOLS__"
+            ],
             "scriptSrc": [
                 "three(?:\\.min)?\\.js"
             ],
@@ -109484,6 +109511,11 @@
             "html": [
                 "<[^>]+\\sdata-v-[0-9a-f]{8}(?:[\\s=>/])"
             ],
+            "scripts": [
+                "\\.__VUE__\\s*=\\s*(?:!0|true)\\b",
+                "\\.__vue_app__\\s*=\\s*[\\w$]",
+                "\\._isVue\\s*=\\s*(?:!0|true)\\b"
+            ],
             "scriptSrc": [
                 "(?:/([\\d.]+))?/vue(?:\\.min)?\\.js\\;version:\\1",
                 "vue[.-]([\\d.]*\\d)[^/]*\\.js\\;version:\\1"
@@ -111906,6 +111938,13 @@
                 "webpackChunk": "",
                 "webpackJsonp": ""
             },
+            "scripts": [
+                "__webpack_require__\\.[a-z]+\\s*=[^=]",
+                "function __webpack_require__\\s*\\(",
+                "import\\s*\\{\\s*__webpack_require__\\b",
+                "webpackChunk[\\w$-]*(?:[\"']\\])?\\s*=[^=]",
+                "webpackJsonp[\\w$-]*(?:[\"']\\])?\\s*=[^=]"
+            ],
             "description": "Webpack is a JavaScript module bundler for web applications and assets.",
             "website": "https://webpack.js.org/",
             "icon": "Webpack.svg"
@@ -118616,6 +118655,10 @@
                 "core": "",
                 "core.version": "^(.+)$\\;version:\\1"
             },
+            "scripts": [
+                "Denis Pushkarev \\(zloirock\\.ru\\)",
+                "\\{\\s*version\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*,\\s*mode\\s*:\\s*[\"'](?:global|pure)[\"']\\;version:\\1"
+            ],
             "description": "core-js is a modular standard library for JavaScript, with polyfills for newer ECMAScript features.",
             "website": "https://github.com/zloirock/core-js",
             "icon": "core-js.png"
@@ -120309,6 +120352,12 @@
                 "jQuery.fn.jquery": "([\\d.]+)\\;version:\\1",
                 "jQuery.prototype.jquery": "([\\d.]+)\\;version:\\1"
             },
+            "scripts": [
+                "/\\*!\\s*jQuery v(\\d+\\.\\d+\\.\\d+[\\w.-]*)\\;version:\\1",
+                "\\{\\s*jquery\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+[\\w.-]*)[\"']\\s*,\\s*constructor\\s*:\\;version:\\1",
+                "expando\\s*:\\s*[\"']jQuery[\"']\\s*\\+",
+                "jQuery JavaScript Library v(\\d+\\.\\d+\\.\\d+[\\w.-]*)\\;version:\\1"
+            ],
             "scriptSrc": [
                 "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js(?:[?#]|$)",
                 "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js\\?(?:v|ver)=(\\d+\\.\\d+\\.\\d+)\\;version:\\1",

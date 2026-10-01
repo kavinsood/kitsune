@@ -50,6 +50,10 @@
             "_comment": "Bare sp.js matched any script named like *sp.js (wsp.js, asp.js).",
             "scriptSrc": "sp\\.js\\;confidence:50"
         },
+        "Next.js": {
+            "_comment": "Next.js 16 builds with Turbopack by default, so Next.js doesn't mean Webpack. Webpack builds of Next.js are detected from their chunks (self.webpackChunk_N_E, see Webpack in add).",
+            "implies": ["Webpack"]
+        },
         "Remix": {
             "_comment": "Remix 3 isn't built on React. React and React Router are now detected from the globals of Remix 1-2 (see add).",
             "implies": ["React", "React Router"]
@@ -142,12 +146,23 @@
             "description": "Remix is a full-stack web framework. Remix 1 and 2 are built on React; Remix 3 is not."
         },
         "React": {
-            "_comment": "Remix 1-2 globals, which Remix no longer implies React from.",
+            "_comment": "Remix 1-2 globals, which Remix no longer implies React from. In bundled JS: react-dom's devtools injection, which carries the version (injectIntoDevTools: bundleType, version, rendererPackageName), the fiber and props keys it sets on DOM nodes (internalInstanceKey, internalPropsKey; adjacent in ReactDOMComponentTree), and the error-decoder URL of React 16-18 production builds. Bare __reactFiber isn't used: session-replay and testing tools read it.",
             "js": {"__remixContext": "", "__remixRouteModules": ""},
+            "scripts": [
+                "bundleType\\s*:\\s*[01]\\s*,\\s*version\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+[\\w.-]*)[\"']\\s*,\\s*rendererPackageName\\s*:\\s*[\"']react-dom[\"']\\;version:\\1",
+                "__reactFiber\\$[\"']\\s*\\+\\s*[\\w$]+\\s*,\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*[\"']__reactProps\\$[\"']",
+                "reactjs\\.org/docs/error-decoder\\.html\\?invariant="
+            ],
             "html": "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
         },
         "Vue.js": {
-            "html": "<[^>]+\\sdata-v-[0-9a-f]{8}(?:[\\s=>/])"
+            "_comment": "In bundled JS: Vue 3's app.mount (rootContainer.__vue_app__ = app) and renderer setup (target.__VUE__ = true), and Vue 2's initMixin (vm._isVue = true). Reads of these (devtools, Alpine.js, other libraries checking for Vue objects) aren't assignments and don't match; __v_isRef and __isVue are used outside Vue.",
+            "html": "<[^>]+\\sdata-v-[0-9a-f]{8}(?:[\\s=>/])",
+            "scripts": [
+                "\\.__vue_app__\\s*=\\s*[\\w$]",
+                "\\.__VUE__\\s*=\\s*(?:!0|true)\\b",
+                "\\._isVue\\s*=\\s*(?:!0|true)\\b"
+            ]
         },
         "VitePress": {
             "dom": ["#VPContent", ".VPNav", ".VPDoc"],
@@ -211,7 +226,66 @@
         },
         "jQuery": {
             "_comment": "Unversioned jquery(.slim)(.min).js, as Drupal and WordPress serve it, which the remove of bare 'jquery' lost; the version from a ?v= or ?ver= query if there is one. Plugins (jquery.cookie.js, jquery-ui.js) don't match.",
-            "scriptSrc": ["(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js(?:[?#]|$)", "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js\\?(?:v|ver)=(\\d+\\.\\d+\\.\\d+)\\;version:\\1"]
+            "scriptSrc": ["(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js(?:[?#]|$)", "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js\\?(?:v|ver)=(\\d+\\.\\d+\\.\\d+)\\;version:\\1"],
+            "scripts": [
+                "/\\*!\\s*jQuery v(\\d+\\.\\d+\\.\\d+[\\w.-]*)\\;version:\\1",
+                "jQuery JavaScript Library v(\\d+\\.\\d+\\.\\d+[\\w.-]*)\\;version:\\1",
+                "\\{\\s*jquery\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+[\\w.-]*)[\"']\\s*,\\s*constructor\\s*:\\;version:\\1",
+                "expando\\s*:\\s*[\"']jQuery[\"']\\s*\\+"
+            ]
+        },
+        "Lodash": {
+            "_comment": "In bundled JS: lodash's HASH_UNDEFINED sentinel (Hash, SetCache; also in lodash-es and the per-method packages), and in the full build the VERSION, LARGE_ARRAY_SIZE and CORE_ERROR_TEXT constants, declared together at the top of lodash.js.",
+            "scripts": [
+                "__lodash_hash_undefined__",
+                "[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[,;]\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*200\\s*[,;]\\s*(?:var\\s+)?[\\w$]+\\s*=\\s*[\"']Unsupported core-js use\\;version:\\1"
+            ]
+        },
+        "Moment.js": {
+            "_comment": "In bundled JS: copyConfig (to._isAMomentObject = from._isAMomentObject; libraries that only test for moments read the flag), the deprecation message of the Date fallback in createFromInputFallback, and the version from moment.js's setup (hooks.version = '...'; setHookCallback(createLocal); hooks.fn = proto; hooks.min = min).",
+            "scripts": [
+                "\\._isAMomentObject\\s*=\\s*[\\w$]+\\._isAMomentObject",
+                "moment construction falls back to js Date\\(\\)",
+                "\\.version\\s*=\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[;,]\\s*[\\w$]+\\([\\w$]+\\)\\s*[;,]\\s*[\\w$]+\\.fn\\s*=\\s*[\\w$]+\\s*[;,]\\s*[\\w$]+\\.min\\s*=\\;version:\\1"
+            ]
+        },
+        "Axios": {
+            "_comment": "In bundled JS: the isAxiosError flag axios sets on its errors (0.x enhanceError: error.isAxiosError = true; 1.x: defineProperty(AxiosError.prototype, 'isAxiosError', {value: true})) and 1.x's AxiosError name. Code that tests e.isAxiosError doesn't match. Versions: 1.x's env/data.js VERSION (const VERSION = \"1.7.2\"), which validator.js imports and bundlers place right before it (validators = {}; ['object', 'boolean', ...].forEach), and 0.x's bundled package.json.",
+            "scripts": [
+                "isAxiosError[\"']?\\s*(?:=|,\\s*\\{\\s*value\\s*:)\\s*(?:!0|true)\\b",
+                "\\.name\\s*=\\s*[\"']AxiosError[\"']",
+                "=\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*[,;]\\s*(?:(?:const|let|var)\\s+)?[\\w$]+\\s*=\\s*\\{\\}\\s*[,;]\\s*\\[[\"']object[\"']\\s*,\\s*[\"']boolean[\"']\\s*,\\s*[\"']number[\"']\\s*,\\s*[\"']function[\"']\\s*,\\s*[\"']string[\"']\\s*,\\s*[\"']symbol[\"']\\]\\.forEach\\;version:\\1",
+                "\\{\"name\":\"axios\",\"version\":\"(\\d+\\.\\d+\\.\\d+)\"\\;version:\\1"
+            ]
+        },
+        "Webpack": {
+            "_comment": "In bundled JS: the chunk-loading global webpack 4 and 5 assign (self.webpackChunk<name> = self.webpackChunk<name> || [], window.webpackJsonp<name> = ...), the runtime's __webpack_require__ function and the properties it sets (__webpack_require__.d = ...), and the import of __webpack_require__ in ES-module output. The js keys only match the default global names. webpackChunkName (magic comments) has no assignment and doesn't match.",
+            "scripts": [
+                "webpackChunk[\\w$-]*(?:[\"']\\])?\\s*=[^=]",
+                "webpackJsonp[\\w$-]*(?:[\"']\\])?\\s*=[^=]",
+                "function __webpack_require__\\s*\\(",
+                "__webpack_require__\\.[a-z]+\\s*=[^=]",
+                "import\\s*\\{\\s*__webpack_require__\\b"
+            ]
+        },
+        "Redux": {
+            "_comment": "In bundled JS: the type of the action createStore dispatches on creation (ActionTypes.INIT, '@@redux/INIT' + random).",
+            "scripts": "@@redux/INIT"
+        },
+        "Three.js": {
+            "_comment": "In bundled JS: the warning Three.js gives when a page loads two copies, and the __THREE_DEVTOOLS__ events it dispatches (Object3D, WebGLRenderer).",
+            "scripts": ["Multiple instances of Three\\.js being imported", "__THREE_DEVTOOLS__"]
+        },
+        "core-js": {
+            "_comment": "In bundled JS: the copyright core-js records in its shared store, with the version (store.versions.push({version, mode, copyright})). Lodash also reads __core-js_shared__, so that isn't used.",
+            "scripts": [
+                "Denis Pushkarev \\(zloirock\\.ru\\)",
+                "\\{\\s*version\\s*:\\s*[\"'](\\d+\\.\\d+\\.\\d+)[\"']\\s*,\\s*mode\\s*:\\s*[\"'](?:global|pure)[\"']\\;version:\\1"
+            ]
+        },
+        "Sentry": {
+            "_comment": "In bundled JS: the global carrier the Sentry SDK sets up (GLOBAL_OBJ.__SENTRY__ = GLOBAL_OBJ.__SENTRY__ || {}).",
+            "scripts": "\\.__SENTRY__\\s*=\\s*[\\w$.]+\\.__SENTRY__\\s*\\|\\|"
         },
         "Payload CMS": {
             "html": "<[^>]+(?:src|href)=\"[^\"]*/api/media/file/"
