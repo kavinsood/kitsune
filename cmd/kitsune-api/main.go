@@ -13,7 +13,7 @@ import (
 func main() {
 	fmt.Println("Starting Kitsune API server...")
 
-	// Get port from environment variable (for Render) or default to 8080
+	// Get port from the PORT environment variable or default to 8080
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

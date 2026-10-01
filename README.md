@@ -124,6 +124,24 @@ The server provides a simple JSON API for on-demand analysis.
     }
     ```
 
+### As a Cloudflare Worker
+
+`cmd/kitsune-worker` builds the same API to Go `js/wasm` and serves it from a
+Cloudflare Worker. This is how it runs in production, behind
+[sherlockd](https://sherlockd.kavinsood.com) via a service binding.
+
+```sh
+cd cmd/kitsune-worker
+npm install
+npx wrangler dev      # local, on :8787
+npx wrangler deploy   # builds with ./build.sh, then deploys
+```
+
+Pages are fetched over raw TCP sockets so origins see a normal client and
+their real `Server` header comes through; sites hosted on Cloudflare fall back
+to `fetch`. `cmd/kitsune-worker/tail` is an optional tail consumer that keeps
+recent request events (CPU time, memory, cold starts) in KV.
+
 -----
 
 ### Architecture & Data
