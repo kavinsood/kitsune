@@ -1,0 +1,21 @@
+assets/lint_baseline.txt
+  s_7b48d03f44c334::t_05b2da3a86662e 1-5
+assets/overrides.json
+  s_7b48d03f44c334::t_37c1d28ed2b668 1-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "95c40421e47b9f1ab3eca354aa60a6d5a6aca7ea",
+  "prompts": {},
+  "sessions": {
+    "s_7b48d03f44c334": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5a25a13ce1c3855a",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
