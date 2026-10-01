@@ -56,27 +56,43 @@ func (c *compiler) patterns(raws []string, prefilter bool) []*ParsedPattern {
 	return out
 }
 
-func (c *compiler) keyed(raws map[string]string) []keyedPattern {
+// keyed compiles patterns for the values of keys. Keys are lowercased if
+// lower is set, as the keys they are matched against are.
+func (c *compiler) keyed(raws map[string]string, lower bool) []keyedPattern {
 	var out []keyedPattern
 	for _, key := range sortedKeys(raws) {
 		if p := c.pattern(raws[key], false); p != nil {
+			if lower {
+				key = strings.ToLower(key)
+			}
 			out = append(out, keyedPattern{key: key, pattern: p})
 		}
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].key < out[j].key })
 	return out
 }
 
-func (c *compiler) multiKeyed(raws map[string][]string) []keyedPatterns {
+// multiKeyed compiles lists of patterns for the values of keys, which are
+// lowercased if lower is set. An empty list means that the key must merely
+// be present, so it is compiled as the pattern matching anything. A key
+// none of whose patterns compile is dropped.
+func (c *compiler) multiKeyed(raws map[string][]string, lower bool) []keyedPatterns {
 	var out []keyedPatterns
 	for _, key := range sortedKeys(raws) {
-		var patterns []*ParsedPattern
-		for _, raw := range raws[key] {
-			if p := c.pattern(raw, false); p != nil {
-				patterns = append(patterns, p)
-			}
+		list := raws[key]
+		if len(list) == 0 {
+			list = []string{""}
+		}
+		patterns := c.patterns(list, false)
+		if len(patterns) == 0 {
+			continue
+		}
+		if lower {
+			key = strings.ToLower(key)
 		}
 		out = append(out, keyedPatterns{key: key, patterns: patterns})
 	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].key < out[j].key })
 	return out
 }
 
@@ -89,52 +105,46 @@ func (c *compiler) selector(selector string) *domSelector {
 	return sel
 }
 
-// domRule compiles the checks of a dom selector. It reports false if any
-// check can't be evaluated (its regex doesn't compile, or it inspects
-// "properties", which are JS runtime values absent from static HTML): the
-// rule is then dropped as a whole, since dropping just that check would
-// loosen the rule (to matching every element the selector finds, if it was
-// the only check).
+// domRule compiles the checks of a dom selector. Each check ("exists",
+// "text" or an attribute) is a detection of its own, as in wappalyzer, so a
+// check whose regex doesn't compile is dropped on its own. It reports false
+// if the rule has no checks left, or if it inspects "properties", which are
+// JS runtime values absent from static HTML: such rules are dropped as a
+// whole.
 func (c *compiler) domRule(selector string, raws map[string]interface{}) (domRule, bool) {
 	checks := make(map[string]*ParsedPattern)
-	for _, attr := range sortedKeys(raws) {
-		value := raws[attr]
-		switch attr {
-		case "exists":
-			// Just the existence is enough, no need for pattern matching
-			checks[attr] = nil
+	add := func(name string, value interface{}) {
+		if raw, ok := value.(string); ok {
+			// Prefiltered: element text (of scripts and styles, say) can
+			// be large.
+			if p := c.pattern(raw, true); p != nil {
+				checks[name] = p
+			}
+		}
+	}
+	for _, key := range sortedKeys(raws) {
+		value := raws[key]
+		switch key {
 		case "properties":
 			return domRule{}, false
 		case "attributes":
-			// Process attribute patterns
-			attrMap, ok := value.(map[string]interface{})
+			attrs, ok := value.(map[string]interface{})
 			if !ok {
-				return domRule{}, false
+				continue
 			}
-			for _, attrName := range sortedKeys(attrMap) {
-				patternStr, ok := attrMap[attrName].(string)
-				if !ok {
-					return domRule{}, false
-				}
-				p := c.pattern(patternStr, false)
-				if p == nil {
-					return domRule{}, false
-				}
-				checks[attrName] = p
+			// An attribute named "text" is the text of the element:
+			// wappalyzer's data puts it there in a few places.
+			for _, name := range sortedKeys(attrs) {
+				add(name, attrs[name])
 			}
 		default:
-			// "text" (text content matching), or direct attribute
-			// matching (like "href", "id", "class")
-			patternStr, ok := value.(string)
-			if !ok {
-				return domRule{}, false
-			}
-			p := c.pattern(patternStr, false)
-			if p == nil {
-				return domRule{}, false
-			}
-			checks[attr] = p
+			// "exists", "text", or an attribute given directly (like
+			// "src" or "class").
+			add(key, value)
 		}
+	}
+	if len(checks) == 0 {
+		return domRule{}, false
 	}
 	rule := domRule{sel: c.selector(selector)}
 	for _, name := range sortedKeys(checks) {
@@ -146,21 +156,25 @@ func (c *compiler) domRule(selector string, raws map[string]interface{}) (domRul
 // fingerprint compiles a fingerprint.
 func (c *compiler) fingerprint(name string, fingerprint *Fingerprint) *CompiledFingerprint {
 	compiled := &CompiledFingerprint{
-		name:       name,
-		cats:       fingerprint.Cats,
-		implies:    fingerprint.Implies,
-		info:       newInfo(fingerprint.Description, fingerprint.Website, fingerprint.Icon, fingerprint.CPE),
-		cookies:    c.keyed(fingerprint.Cookies),
-		js:         c.keyed(fingerprint.JS),
-		headers:    c.keyed(fingerprint.Headers),
-		html:       c.patterns(fingerprint.HTML, true),
-		script:     c.patterns(fingerprint.Script, false),
-		scriptSrc:  c.patterns(fingerprint.ScriptSrc, true),
-		meta:       c.multiKeyed(fingerprint.Meta),
-		dns:        c.multiKeyed(fingerprint.DNS),
-		robots:     c.patterns(fingerprint.Robots, true),
-		certIssuer: c.patterns(fingerprint.CertIssuer, true),
-		css:        c.patterns(fingerprint.CSS, true),
+		name:             name,
+		cats:             fingerprint.Cats,
+		implies:          fingerprint.Implies,
+		requires:         fingerprint.Requires,
+		requiresCategory: fingerprint.RequiresCategory,
+		excludes:         fingerprint.Excludes,
+		info:             newInfo(fingerprint.Description, fingerprint.Website, fingerprint.Icon, fingerprint.CPE),
+		cookies:          c.keyed(fingerprint.Cookies, true),
+		js:               c.keyed(fingerprint.JS, false),
+		headers:          c.keyed(fingerprint.Headers, true),
+		html:             c.patterns(fingerprint.HTML, true),
+		script:           c.patterns(fingerprint.Script, true),
+		scriptSrc:        c.patterns(fingerprint.ScriptSrc, true),
+		meta:             c.multiKeyed(fingerprint.Meta, true),
+		dns:              c.multiKeyed(fingerprint.DNS, false),
+		certIssuer:       c.patterns(fingerprint.CertIssuer, true),
+		css:              c.patterns(fingerprint.CSS, true),
+		text:             c.patterns(fingerprint.Text, true),
+		url:              c.patterns(fingerprint.URL, true),
 	}
 	for _, selector := range sortedKeys(fingerprint.Dom) {
 		if rule, ok := c.domRule(selector, fingerprint.Dom[selector]); ok {
@@ -181,18 +195,19 @@ func (f *CompiledFingerprints) buildIndexes() {
 // inputs, the literals of the dom selectors, and the JS global names used by
 // js patterns, sorted.
 type literalLists struct {
-	html, css, robots, dom, jsGlobals []string
+	html, script, css, text, dom []string
 }
 
 // literalLists returns f's literal lists, deriving them on first use.
 func (f *CompiledFingerprints) literalLists() *literalLists {
 	f.listsOnce.Do(func() {
-		var html, css, robots, dom, js literalList
+		var html, script, css, text, dom literalList
 		seenSelectors := make(map[*domSelector]bool)
 		for _, fp := range f.Apps {
 			html.addPatterns(fp.html)
+			script.addPatterns(fp.script)
 			css.addPatterns(fp.css)
-			robots.addPatterns(fp.robots)
+			text.addPatterns(fp.text)
 			for _, rule := range fp.dom {
 				if seenSelectors[rule.sel] {
 					continue
@@ -202,12 +217,8 @@ func (f *CompiledFingerprints) literalLists() *literalLists {
 					dom.add(part...)
 				}
 			}
-			for _, kp := range fp.js {
-				js.add(kp.key)
-			}
 		}
-		sort.Strings(js.list)
-		f.lists = literalLists{html: html.list, css: css.list, robots: robots.list, dom: dom.list, jsGlobals: js.list}
+		f.lists = literalLists{html: html.list, script: script.list, css: css.list, text: text.list, dom: dom.list}
 	})
 	return &f.lists
 }
@@ -298,13 +309,9 @@ func (fp *CompiledFingerprint) mapPatterns(conv func(p *ParsedPattern, prefilter
 	multiKeyed := func(kps []keyedPatterns) []keyedPatterns {
 		var out []keyedPatterns
 		for _, kp := range kps {
-			var patterns []*ParsedPattern
-			for _, p := range kp.patterns {
-				if q := conv(p, false); q != nil {
-					patterns = append(patterns, q)
-				}
+			if patterns := list(kp.patterns, false); len(patterns) > 0 {
+				out = append(out, keyedPatterns{key: kp.key, patterns: patterns})
 			}
-			out = append(out, keyedPatterns{key: kp.key, patterns: patterns})
 		}
 		return out
 	}
@@ -313,29 +320,27 @@ func (fp *CompiledFingerprint) mapPatterns(conv func(p *ParsedPattern, prefilter
 	out.js = keyed(fp.js)
 	out.headers = keyed(fp.headers)
 	out.html = list(fp.html, true)
-	out.script = list(fp.script, false)
+	out.script = list(fp.script, true)
 	out.scriptSrc = list(fp.scriptSrc, true)
 	out.meta = multiKeyed(fp.meta)
 	out.dns = multiKeyed(fp.dns)
-	out.robots = list(fp.robots, true)
 	out.certIssuer = list(fp.certIssuer, true)
 	out.css = list(fp.css, true)
+	out.text = list(fp.text, true)
+	out.url = list(fp.url, true)
 	out.dom = nil
-	// A dom rule is dropped as a whole if conv drops any of its checks, as
-	// compiler.domRule does.
-rules:
+	// As in compiler.domRule, a dom check is dropped on its own if conv
+	// drops it, and the rule if it has no checks left.
 	for _, rule := range fp.dom {
 		mapped := domRule{sel: rule.sel}
 		for _, check := range rule.checks {
-			if check.pattern == nil {
-				mapped.checks = append(mapped.checks, check)
-			} else if q := conv(check.pattern, false); q != nil {
+			if q := conv(check.pattern, true); q != nil {
 				mapped.checks = append(mapped.checks, domCheck{name: check.name, pattern: q})
-			} else {
-				continue rules
 			}
 		}
-		out.dom = append(out.dom, mapped)
+		if len(mapped.checks) > 0 {
+			out.dom = append(out.dom, mapped)
+		}
 	}
 	return &out
 }

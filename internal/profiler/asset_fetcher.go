@@ -59,8 +59,8 @@ func NewAssetFetcher(baseURL string, ctx context.Context, wg *sync.WaitGroup, ma
 func (af *AssetFetcher) Start() {
 	go func() {
 		for assetURL := range af.urlChan {
-			// Create a worker goroutine for each URL
-			af.wg.Add(1)
+			// Create a worker goroutine for each URL. AddURL has
+			// already counted it in wg.
 			go af.processURL(assetURL)
 		}
 	}()
@@ -75,11 +75,15 @@ func (af *AssetFetcher) Stop() {
 // AddURL adds an asset URL to be fetched
 // This is a convenience method that can be used instead of sending directly to the channel
 func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
+	// Count the URL in wg before handing it over, so that a Wait after
+	// Stop can't return before it is fetched.
+	af.wg.Add(1)
 	select {
 	case af.urlChan <- AssetURL{URL: url, Type: assetType, Priority: priority}:
 		// URL was added successfully
 	case <-af.ctx.Done():
 		// Context was cancelled, don't add more URLs
+		af.wg.Done()
 	}
 }
 

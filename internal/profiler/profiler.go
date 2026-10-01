@@ -1,9 +1,6 @@
 package profiler
 
 import (
-	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,6 +18,9 @@ type richResult struct {
 	title        string              // Page title
 	appInfo      map[string]AppInfo  // Application info
 	categoryInfo map[string]CatsInfo // Category info
+	// detections holds every tech detected, by name, including those not
+	// confident enough to be reported.
+	detections map[string]detection
 }
 
 // GetTechnologies returns the detected technologies map
@@ -35,10 +35,8 @@ type Wappalyze struct {
 	original     *Fingerprints
 	originalOnce sync.Once
 
-	fingerprints  *CompiledFingerprints
-	regexTimeout  time.Duration
-	httpClient    *http.Client
-	certInfoCache *sync.Map
+	fingerprints *CompiledFingerprints
+	regexTimeout time.Duration
 }
 
 // New creates a new tech detection instance
@@ -46,52 +44,10 @@ type Wappalyze struct {
 // It uses the fingerprints compiled into the binary (see gen.go), so it
 // costs next to nothing: regexes and selectors are compiled on first use.
 func New() (*Wappalyze, error) {
-	wappalyze := &Wappalyze{
-		regexTimeout:  100 * time.Millisecond, // A sensible default
-		certInfoCache: &sync.Map{},
-	}
-
-	// Create the custom transport with the VerifyConnection callback
-	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // Required because we are overriding verification
-			VerifyConnection: func(cs tls.ConnectionState) error {
-				// --- SECURITY CRITICAL ---
-				// We MUST perform our own verification here.
-				opts := x509.VerifyOptions{
-					DNSName:       cs.ServerName,
-					Intermediates: x509.NewCertPool(),
-				}
-				if len(cs.PeerCertificates) <= 1 {
-					// Not enough certificates to build a chain with intermediates.
-					// Can still check the single cert against system roots.
-				} else {
-					for _, cert := range cs.PeerCertificates[1:] {
-						opts.Intermediates.AddCert(cert)
-					}
-				}
-
-				if _, err := cs.PeerCertificates[0].Verify(opts); err != nil {
-					// Allow connection to proceed for fingerprinting purposes
-					// even with an invalid cert, but do not cache issuer info.
-					return nil
-				}
-
-				// If verification is successful, cache the issuer's Common Name.
-				issuer := cs.PeerCertificates[0].Issuer.CommonName
-				wappalyze.certInfoCache.Store(cs.ServerName, issuer)
-				return nil
-			},
-		},
-	}
-
-	wappalyze.httpClient = &http.Client{
-		Timeout:   10 * time.Second,
-		Transport: transport,
-	}
-
-	wappalyze.fingerprints = embeddedFingerprints()
-	return wappalyze, nil
+	return &Wappalyze{
+		regexTimeout: 100 * time.Millisecond, // A sensible default
+		fingerprints: embeddedFingerprints(),
+	}, nil
 }
 
 // embeddedFingerprints returns the fingerprints compiled into the binary,
@@ -319,12 +275,6 @@ func (u UniqueFingerprints) SetIfNotExists(value, version string, confidence int
 	}
 }
 
-type matchPartResult struct {
-	application string
-	confidence  int
-	version     string
-}
-
 // FingerprintWithTitle identifies technologies on a target,
 // based on the received response headers and body.
 // It also returns the title of the page.
@@ -431,41 +381,6 @@ func AppInfoFromFingerprint(fingerprint *CompiledFingerprint) AppInfo {
 		CPE:         cpe,
 		Categories:  categories,
 	}
-}
-
-// fetchAndAnalyzeRobotsTxt fetches robots.txt from the specified URL and analyzes it for technology fingerprints
-
-func (s *Wappalyze) fetchAndAnalyzeRobotsTxt(robotsURL string, ctx context.Context) []matchPartResult {
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", robotsURL, nil)
-	if err != nil {
-		return nil
-	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5931.0 Safari/537.36")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-
-	// Only process if status code is 200
-	if resp.StatusCode != 200 {
-		return nil
-	}
-
-	// Read robots.txt content
-	robotsContent, err := readString(resp, 1024*1024) // 1MB limit
-	if err != nil {
-		return nil
-	}
-
-	// Match robots.txt patterns against content with timeout
-	return s.fingerprints.matchString(robotsContent, robotsPart, s.regexTimeout)
 }
 
 // FingerprintWithCats identifies technologies on a target,

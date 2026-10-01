@@ -111,11 +111,13 @@ func TestExtractVersion(t *testing.T) {
 			expectedVer: "found",
 			expectError: false,
 		},
+		// As in wappalyzer, a ternary needs a non-empty true branch, so
+		// this is no ternary and "?:not found" is not a valid version.
 		{
 			name:        "Version with ternary - false",
 			pattern:     "Mage\\;version:\\1?:not found",
 			target:      "Mage",
-			expectedVer: "not found",
+			expectedVer: "",
 			expectError: false,
 		},
 		{

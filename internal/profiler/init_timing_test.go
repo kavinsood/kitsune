@@ -61,7 +61,7 @@ func TestInitPhases(t *testing.T) {
 		t1 := time.Now()
 		f.domLiteralMatcher()
 		t2 := time.Now()
-		f.hasJSGlobal("x")
+		f.jsGlobals()
 		t3 := time.Now()
 		seen := map[*domSelector]bool{}
 		for _, fp := range g.Apps {

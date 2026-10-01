@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // ParsedPattern encapsulates a regular expression with
@@ -71,13 +72,13 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 
 			switch keyValue[0] {
 			case "confidence":
+				// Defaulting a bad confidence to 100 would make the
+				// pattern more decisive than intended, so reject it.
 				conf, err := strconv.Atoi(keyValue[1])
-				if err != nil {
-					// If conversion fails, keep default confidence
-					p.Confidence = 100
-				} else {
-					p.Confidence = conf
+				if err != nil || conf < 0 {
+					return nil, fmt.Errorf("invalid confidence in pattern %q", pattern)
 				}
+				p.Confidence = conf
 			case "version":
 				p.Version = keyValue[1]
 			}
@@ -135,16 +136,19 @@ func (p *ParsedPattern) initPrefilter() {
 }
 
 // mayMatch reports whether p could match a target, given has reporting
-// whether a literal occurs in the lowercased target. A false result means
-// Evaluate would certainly fail. Callers must not use the prefilter if the
-// lowercased target contains foldHazard.
+// whether a literal occurs in prefilterInput(target). A false result means
+// Evaluate would certainly fail.
 func (p *ParsedPattern) mayMatch(has func(lit string) bool) bool {
 	return p.literals.satisfied(has)
 }
 
+// Evaluate matches target against p, returning whether it matches and the
+// version it yields, which is "" if none or invalid.
 func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, string) {
 	if p.SkipRegex {
-		return true, ""
+		// Like wappalyzer's empty regex, which matches with an empty
+		// match, so a static version such as "\;version:2" applies.
+		return true, p.extractVersion([]string{""})
 	}
 	re := p.re()
 	if re == nil {
@@ -162,57 +166,63 @@ func (p *ParsedPattern) Evaluate(target string, timeout time.Duration) (bool, st
 	if len(submatches) == 0 {
 		return false, ""
 	}
-	extractedVersion, _ := p.extractVersion(submatches)
-	return true, extractedVersion
+	return true, p.extractVersion(submatches)
 }
 
-// extractVersion uses the provided pattern to extract version information from a target string.
-func (p *ParsedPattern) extractVersion(submatches []string) (string, error) {
-	if len(submatches) == 0 {
-		return "", nil // No matches found
-	}
+// maxVersionMatch is the length of the longest submatch substituted into a
+// version, as in wappalyzer.
+const maxVersionMatch = 10
 
-	result := p.Version
-	for i, match := range submatches[1:] { // Start from 1 to skip the entire match
-		placeholder := fmt.Sprintf("\\%d", i+1)
-		result = strings.ReplaceAll(result, placeholder, match)
+// extractVersion returns the version for submatches (the whole match and
+// its groups), resolving the backreferences and ternaries in p.Version as
+// wappalyzer's resolveVersion does, quirks included: \N is replaced by
+// group N, and a ternary \N?a:b, which runs to the end of the version, by
+// a if group N is non-empty and b otherwise (substituting into the
+// unresolved version, which discards earlier substitutions). Groups longer
+// than maxVersionMatch are skipped, leaving their backreferences, the
+// first of which is then removed. The result is "" unless it is a valid
+// version (see normalizeVersion).
+func (p *ParsedPattern) extractVersion(submatches []string) string {
+	if p.Version == "" || len(submatches) == 0 {
+		return ""
 	}
-
-	// Evaluate any ternary expressions in the result
-	result, err := evaluateVersionExpression(result, submatches[1:])
-	if err != nil {
-		return "", err
+	version := p.Version
+	resolved := version
+	for i, match := range submatches {
+		if utf8.RuneCountInString(match) > maxVersionMatch {
+			continue
+		}
+		ref := `\` + strconv.Itoa(i)
+		if start, a, b, ok := ternary(version, ref); ok {
+			if match != "" {
+				resolved = version[:start] + a
+			} else {
+				resolved = version[:start] + b
+			}
+		}
+		resolved = strings.ReplaceAll(strings.TrimSpace(resolved), ref, match)
 	}
-	return strings.TrimSpace(result), nil
+	if i := strings.IndexByte(resolved, '\\'); i >= 0 && i+1 < len(resolved) && '0' <= resolved[i+1] && resolved[i+1] <= '9' {
+		resolved = resolved[:i] + resolved[i+2:]
+	}
+	return normalizeVersion(resolved)
 }
 
-// evaluateVersionExpression handles ternary expressions in version strings.
-func evaluateVersionExpression(expression string, submatches []string) (string, error) {
-	if strings.Contains(expression, "?") {
-		parts := strings.Split(expression, "?")
-		if len(parts) != 2 {
-			return "", fmt.Errorf("invalid ternary expression: %s", expression)
+// ternary finds the first ternary for the backreference ref in version, as
+// the regex ref\?([^:]+):(.*)$ does, returning where it starts and its
+// branches.
+func ternary(version, ref string) (start int, a, b string, ok bool) {
+	for i := 0; i < len(version); {
+		j := strings.Index(version[i:], ref+"?")
+		if j < 0 {
+			break
 		}
-
-		trueFalseParts := strings.Split(parts[1], ":")
-		if len(trueFalseParts) != 2 {
-			return "", fmt.Errorf("invalid true/false parts in ternary expression: %s", expression)
+		start = i + j
+		rest := version[start+len(ref)+1:]
+		if colon := strings.IndexByte(rest, ':'); colon > 0 {
+			return start, rest[:colon], rest[colon+1:], true
 		}
-
-		if trueFalseParts[0] != "" { // Simple existence check
-			if len(submatches) == 0 {
-				return trueFalseParts[1], nil
-			}
-			return trueFalseParts[0], nil
-		}
-		if trueFalseParts[1] == "" {
-			if len(submatches) == 0 {
-				return "", nil
-			}
-			return trueFalseParts[0], nil
-		}
-		return trueFalseParts[1], nil
+		i = start + 1
 	}
-
-	return expression, nil
+	return 0, "", "", false
 }

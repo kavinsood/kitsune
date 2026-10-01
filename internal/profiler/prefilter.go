@@ -1,7 +1,6 @@
 package profiler
 
 import (
-	"regexp"
 	"regexp/syntax"
 	"sort"
 	"strings"
@@ -29,8 +28,21 @@ const minScanLen = 4 << 10
 
 // foldHazard is the only non-ASCII rune whose simple case fold is an ASCII
 // letter but whose lowercase form is not ('ſ' folds to 's'). An input
-// containing it must bypass case-insensitive prefilters.
+// containing it must have it replaced for case-insensitive prefilters (see
+// prefilterInput).
 const foldHazard = "ſ"
+
+// prefilterInput returns s in the form prefilter literals are checked
+// against: lowercased, with foldHazard replaced by the 's' it folds to, so
+// that every literal a case-insensitive match contains occurs in it. ToLower
+// doesn't allocate if s is already lowercase.
+func prefilterInput(s string) string {
+	lowered := strings.ToLower(s)
+	if strings.Contains(lowered, foldHazard) {
+		lowered = strings.ReplaceAll(lowered, foldHazard, "s")
+	}
+	return lowered
+}
 
 // literalSets lists literal sets that are each required by a regex: every
 // match contains at least one literal from every set. nil means no
@@ -58,135 +70,6 @@ func (sets literalSets) satisfied(has func(lit string) bool) bool {
 // in reports whether s contains at least one literal of every set.
 func (sets literalSets) in(s string) bool {
 	return sets.satisfied(func(lit string) bool { return strings.Contains(s, lit) })
-}
-
-// prefilteredRegexp is a case-sensitive regexp whose Find methods first
-// check the input for the literals every match requires. Results are
-// identical to the plain regexp's.
-type prefilteredRegexp struct {
-	*regexp.Regexp
-	literals literalSets
-
-	// If every match starts with one of prefixes, anchored is the regexp
-	// anchored at the start of the input, used to only try matching at
-	// occurrences of the prefixes. See find.
-	prefixes []string
-	anchored *regexp.Regexp
-}
-
-func mustCompilePrefiltered(expr string) *prefilteredRegexp {
-	re := &prefilteredRegexp{
-		Regexp:   regexp.MustCompile(expr),
-		literals: requiredLiterals(expr, false),
-	}
-	if parsed, err := syntax.Parse(expr, syntax.Perl); err == nil {
-		if re.prefixes = prefixLiterals(parsed); re.prefixes != nil {
-			re.anchored = regexp.MustCompile(`^(?:` + expr + `)`)
-		}
-	}
-	return re
-}
-
-func (re *prefilteredRegexp) FindStringSubmatch(s string) []string {
-	if !re.literals.in(s) {
-		return nil
-	}
-	return re.find(s)
-}
-
-// find returns the same as re.Regexp.FindStringSubmatch(s).
-//
-// Go's regexp only skips ahead to a single literal prefix; otherwise its NFA
-// steps over every byte of s. When every match starts with one of a few
-// literals, find instead tries an anchored match at each occurrence of them,
-// leftmost first. The first success is the leftmost-first match, as no match
-// can start anywhere else. It is the same match because a prefix is a
-// literal, so the context-sensitive \b and ^ can't occur at its start.
-func (re *prefilteredRegexp) find(s string) []string {
-	if re.anchored == nil {
-		return re.Regexp.FindStringSubmatch(s)
-	}
-	next := make([]int, len(re.prefixes)) // next occurrence of each prefix, or -1
-	for i, prefix := range re.prefixes {
-		next[i] = strings.Index(s, prefix)
-	}
-	for {
-		pos := -1
-		for _, n := range next {
-			if n >= 0 && (pos < 0 || n < pos) {
-				pos = n
-			}
-		}
-		if pos < 0 {
-			return nil
-		}
-		if m := re.anchored.FindStringSubmatch(s[pos:]); m != nil {
-			return m
-		}
-		for i, prefix := range re.prefixes {
-			if next[i] == pos {
-				if n := strings.Index(s[pos+1:], prefix); n >= 0 {
-					next[i] = pos + 1 + n
-				} else {
-					next[i] = -1
-				}
-			}
-		}
-	}
-}
-
-// prefixLiterals returns literals one of which every match of re starts
-// with, or nil if it can't tell. Case-insensitive literals are not handled.
-func prefixLiterals(re *syntax.Regexp) []string {
-	switch re.Op {
-	case syntax.OpLiteral:
-		if re.Flags&syntax.FoldCase != 0 {
-			return nil
-		}
-		return []string{string(re.Rune)}
-	case syntax.OpCharClass:
-		if info := analyzeLiterals(re, false); len(info.exact) > 0 && usefulLiterals(info.exact) {
-			return info.exact
-		}
-	case syntax.OpCapture, syntax.OpPlus:
-		return prefixLiterals(re.Sub[0])
-	case syntax.OpRepeat:
-		if re.Min >= 1 {
-			return prefixLiterals(re.Sub[0])
-		}
-	case syntax.OpConcat:
-		prefixes := prefixLiterals(re.Sub[0])
-		// A plain literal is followed directly by the next element, so the
-		// prefixes can be extended (e.g. "a(?:ction|utorun)").
-		if prefixes != nil && re.Sub[0].Op == syntax.OpLiteral && len(re.Sub) > 1 {
-			if next := prefixLiterals(re.Sub[1]); next != nil && len(prefixes)*len(next) <= maxLiterals {
-				prefixes = crossLiterals(prefixes, next)
-			}
-		}
-		return prefixes
-	case syntax.OpAlternate:
-		var prefixes []string
-		for _, sub := range re.Sub {
-			p := prefixLiterals(sub)
-			if p == nil {
-				return nil
-			}
-			for _, s := range p {
-				prefixes = addLiteral(prefixes, s)
-			}
-		}
-		if len(prefixes) <= maxLiterals {
-			return prefixes
-		}
-	}
-	return nil
-}
-
-func (re *prefilteredRegexp) FindAllStringSubmatch(s string, n int) [][]string {
-	if !re.literals.in(s) {
-		return nil
-	}
-	return re.Regexp.FindAllStringSubmatch(s, n)
 }
 
 // literalMatcher finds which of a fixed set of literals occur in an input in
@@ -329,9 +212,8 @@ type literalInfo struct {
 // returns nil if no useful set could be derived.
 //
 // If lower is true the literals are lowercased and only ASCII literals are
-// used, so the result can be checked against strings.ToLower(input) for both
-// case-sensitive and case-insensitive regexes (provided the input doesn't
-// contain foldHazard). Otherwise case-insensitive parts of the regex are
+// used, so the result can be checked against prefilterInput(input) for both
+// case-sensitive and case-insensitive regexes. Otherwise case-insensitive parts of the regex are
 // treated as unknown and the literals must be checked against the input as is.
 func requiredLiterals(expr string, lower bool) literalSets {
 	re, err := syntax.Parse(expr, syntax.Perl)
