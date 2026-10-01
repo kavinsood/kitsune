@@ -1,0 +1,21 @@
+internal/profiler/asset_fetcher.go
+  s_3eaa7721cfb89c::t_55beaae877e948 26-31,56-57,122-125,130-134,136
+internal/profiler/asset_fetcher_test.go
+  s_3eaa7721cfb89c::t_85694067a9aa1a 4,6,9,11,62-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ff00e92d5584942218b9ec19103089ed7250e018",
+  "prompts": {},
+  "sessions": {
+    "s_3eaa7721cfb89c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "18d0c15b-9a5e-4c72-b8e0-cdc8bc523aad",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
