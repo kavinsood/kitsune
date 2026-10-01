@@ -5904,7 +5904,10 @@
             "html": [
                 "<[^>]+\\s_ngcontent-(?:ng-)?[a-z0-9]+-c\\d+",
                 "<[^>]+\\s_nghost-(?:ng-)?[a-z0-9]+",
-                "<[^>]+\\sng-version=\"([\\d.]+)\"\\;version:\\1"
+                "<[^>]+\\sng-server-context=",
+                "<[^>]+\\sng-version=\"([\\d.]+)\"\\;version:\\1",
+                "<style\\s[^>]*ng-app-id=",
+                "\\[_nghost-ng-c\\d+\\]"
             ],
             "implies": [
                 "TypeScript"
@@ -5995,7 +5998,7 @@
             ],
             "scriptSrc": [
                 "/([\\d.]+(?:-?rc[.\\d]*)*)/angular(?:\\.min)?\\.js\\;version:\\1",
-                "\\bangular.{0,32}\\.js",
+                "\\bangular[\\w.-]{0,32}\\.js",
                 "angular[.-]([\\d.]*\\d)[^/]*\\.js\\;version:\\1"
             ],
             "excludes": [
@@ -40872,6 +40875,8 @@
                 "gaGlobal": ""
             },
             "html": [
+                "Universal-Federated-Analytics(?:-Min)?\\.js",
+                "[\"']tagId[\"']\\s*:\\s*[\"']G-[A-Z0-9]{6,}",
                 "googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+",
                 "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+",
                 "www\\.google-analytics\\.com/analytics\\.js"
@@ -120305,6 +120310,8 @@
                 "jQuery.prototype.jquery": "([\\d.]+)\\;version:\\1"
             },
             "scriptSrc": [
+                "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js(?:[?#]|$)",
+                "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js\\?(?:v|ver)=(\\d+\\.\\d+\\.\\d+)\\;version:\\1",
                 "/(\\d+\\.\\d+\\.\\d+)/jquery(?:\\.min)\\.js\\;version:\\1",
                 "/(\\d+\\.\\d+\\.\\d+)/jquery(?:\\.slim)?(?:\\.min)?\\.js\\;version:\\1",
                 "/(\\d+\\.\\d+\\.\\d+)/jquery[/.-][^u]\\;version:\\1",

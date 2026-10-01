@@ -42,6 +42,10 @@
             "_comment": "data-v- / data-vue- attributes are also used by other libraries and analytics tags; replaced by the scoped-CSS hash form.",
             "html": "<[^>]+\\sdata-v(?:ue)?-"
         },
+        "AngularJS": {
+            "_comment": "Crossed path segments, so on angular.dev it matched the page's own scripts (https://angular.dev/chunk-x.js) and, as Angular and AngularJS exclude each other, hid Angular. Replaced in add with a form confined to the file name.",
+            "scriptSrc": "\\bangular.{0,32}\\.js"
+        },
         "Snowplow Analytics": {
             "_comment": "Bare sp.js matched any script named like *sp.js (wsp.js, asp.js).",
             "scriptSrc": "sp\\.js\\;confidence:50"
@@ -159,8 +163,12 @@
             "html": ["__sveltekit_[a-z0-9]+\\s*=", "<link[^>]+href=\"[^\"]*/_app/immutable/"],
             "scriptSrc": "/_app/immutable/(?:entry|chunks|nodes)/"
         },
+        "AngularJS": {
+            "scriptSrc": "\\bangular[\\w.-]{0,32}\\.js"
+        },
         "Angular": {
-            "html": ["<[^>]+\\sng-version=\"([\\d.]+)\"\\;version:\\1", "<[^>]+\\s_ngcontent-(?:ng-)?[a-z0-9]+-c\\d+", "<[^>]+\\s_nghost-(?:ng-)?[a-z0-9]+"]
+            "_comment": "Server-rendered Angular: the styles it emits (<style ng-app-id>, emulated-encapsulation selectors) and its hydration markers.",
+            "html": ["<style\\s[^>]*ng-app-id=", "\\[_nghost-ng-c\\d+\\]", "<[^>]+\\sng-server-context=", "<[^>]+\\sng-version=\"([\\d.]+)\"\\;version:\\1", "<[^>]+\\s_ngcontent-(?:ng-)?[a-z0-9]+-c\\d+", "<[^>]+\\s_nghost-(?:ng-)?[a-z0-9]+"]
         },
         "Htmx": {
             "dom": ["[hx-get]", "[hx-post]", "[hx-boost]", "[hx-trigger]", "[data-hx-get]", "[data-hx-post]"],
@@ -182,7 +190,8 @@
             "html": ["cdn\\.segment\\.(?:com|io)/analytics\\.js/v1/", "cdn\\.segment\\.(?:com|io)/analytics-next/"]
         },
         "Google Analytics": {
-            "html": ["googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+", "www\\.google-analytics\\.com/analytics\\.js", "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+"]
+            "_comment": "Besides the gtag snippets: GA4 tag ids in JSON settings (Drupal's google_tag) and the US government's Digital Analytics Program loader, which runs GA4.",
+            "html": ["[\"']tagId[\"']\\s*:\\s*[\"']G-[A-Z0-9]{6,}", "Universal-Federated-Analytics(?:-Min)?\\.js", "googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+", "www\\.google-analytics\\.com/analytics\\.js", "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+"]
         },
         "Hotjar": {
             "js": {"_hjSettings": ""},
@@ -199,6 +208,10 @@
         "Algolia DocSearch": {
             "dom": [".DocSearch-Button", "#docsearch", "link[href*='@docsearch/css']"],
             "scriptSrc": ["@docsearch/js@([\\d.]+)\\;version:\\1", "/docsearch(?:\\.min)?\\.js"]
+        },
+        "jQuery": {
+            "_comment": "Unversioned jquery(.slim)(.min).js, as Drupal and WordPress serve it, which the remove of bare 'jquery' lost; the version from a ?v= or ?ver= query if there is one. Plugins (jquery.cookie.js, jquery-ui.js) don't match.",
+            "scriptSrc": ["(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js(?:[?#]|$)", "(?:^|/)jquery(?:\\.slim)?(?:\\.min)?\\.js\\?(?:v|ver)=(\\d+\\.\\d+\\.\\d+)\\;version:\\1"]
         },
         "Payload CMS": {
             "html": "<[^>]+(?:src|href)=\"[^\"]*/api/media/file/"
