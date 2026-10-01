@@ -80,6 +80,11 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 
 	var title string
 	if len(body) > 0 {
+		// GTM container ids are found in the raw body, so the containers'
+		// fetches start before the page is parsed.
+		for _, id := range gtmContainerIDs(body, maxGTMContainers) {
+			assetFetcher.AddGTMContainer(id)
+		}
 		var found []matchPartResult
 		found, title = s.analyzeHTML(body, pageURL, assetFetcher)
 		add(found)
@@ -88,6 +93,10 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 	// No more URLs will be sent to the fetcher.
 	assetFetcher.Stop()
 	wg.Wait()
+
+	for _, ev := range assetFetcher.GTMEvidence() {
+		matches = append(matches, s.matchGTM(ev, pageURL)...)
+	}
 
 	return s.newRichResult(s.fingerprints.resolve(matches), title)
 }

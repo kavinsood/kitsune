@@ -205,12 +205,44 @@
             "html": ["cdn\\.segment\\.(?:com|io)/analytics\\.js/v1/", "cdn\\.segment\\.(?:com|io)/analytics-next/"]
         },
         "Google Analytics": {
-            "_comment": "Besides the gtag snippets: GA4 tag ids in JSON settings (Drupal's google_tag) and the US government's Digital Analytics Program loader, which runs GA4.",
-            "html": ["[\"']tagId[\"']\\s*:\\s*[\"']G-[A-Z0-9]{6,}", "Universal-Federated-Analytics(?:-Min)?\\.js", "googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+", "www\\.google-analytics\\.com/analytics\\.js", "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+"]
+            "_comment": "Besides the gtag snippets: GA4 tag ids in JSON settings (Drupal's google_tag) and the US government's Digital Analytics Program loader, which runs GA4. scripts: live tags of a GTM container, for which gtm.go writes a 'gtm:tag __<template> id:<id> ' line each: a Google tag, GA4 config or GA4 event tag sending to a G- measurement id, or a Universal Analytics tag.",
+            "html": ["[\"']tagId[\"']\\s*:\\s*[\"']G-[A-Z0-9]{6,}", "Universal-Federated-Analytics(?:-Min)?\\.js", "googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+", "www\\.google-analytics\\.com/analytics\\.js", "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+"],
+            "scripts": ["gtm:tag __(?:googtag|gaawc|gaawe) [^\\n]*id:G-[A-Z0-9]{6,}", "gtm:tag __ua "]
         },
         "Hotjar": {
+            "_comment": "scripts: a live Hotjar Tracking Code tag in a GTM container.",
             "js": {"_hjSettings": ""},
-            "html": ["static\\.hotjar\\.com/c/hotjar-", "_hjSettings\\s*=\\s*\\{\\s*hjid"]
+            "html": ["static\\.hotjar\\.com/c/hotjar-", "_hjSettings\\s*=\\s*\\{\\s*hjid"],
+            "scripts": "gtm:tag __hjtc "
+        },
+        "Google Ads Conversion Tracking": {
+            "_comment": "GTM containers: a live Google Ads Conversion Tracking tag, or a Google tag for an AW- account; and gtag.js loaded for an AW- account.",
+            "scripts": ["gtm:tag __awct ", "gtm:tag __googtag [^\\n]*id:AW-\\d{6,}"],
+            "scriptSrc": "googletagmanager\\.com/gtag/js\\?id=AW-\\d{6,}"
+        },
+        "Google Ads": {
+            "_comment": "A live Google Ads Remarketing tag in a GTM container.",
+            "scripts": "gtm:tag __sp "
+        },
+        "DoubleClick Floodlight": {
+            "_comment": "A live Floodlight counter or sales tag, or a Google tag for a DC- account, in a GTM container.",
+            "scripts": ["gtm:tag __fl[cs] ", "gtm:tag __googtag [^\\n]*id:DC-\\d{6,}"]
+        },
+        "Microsoft Advertising": {
+            "_comment": "A live Microsoft Advertising UET tag in a GTM container (it also injects bat.bing.com/bat.js).",
+            "scripts": "gtm:tag __baut "
+        },
+        "Linkedin Insight Tag": {
+            "_comment": "A live LinkedIn Insight tag in a GTM container (it also injects insight.min.js).",
+            "scripts": "gtm:tag __bzi "
+        },
+        "Pinterest Conversion Tag": {
+            "_comment": "A live Pinterest tag in a GTM container.",
+            "scripts": "gtm:tag __pntr "
+        },
+        "TikTok Pixel": {
+            "_comment": "The pixel's loader host, as a script src or a GTM template's inject_script permission.",
+            "scriptSrc": "//analytics\\.tiktok\\.com/"
         },
         "OneTrust": {
             "dom": ["#onetrust-consent-sdk", "#onetrust-banner-sdk"],

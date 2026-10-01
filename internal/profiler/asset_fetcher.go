@@ -46,6 +46,13 @@ type AssetFetcher struct {
 	semaphore  chan struct{}                   // Semaphore for limiting concurrent requests
 	dnsRecords map[string][]string             // Results from DNS lookups
 	added      map[string]bool                 // URLs added, guarded by mutex
+
+	// Google tag containers (see gtm.go): the keys of those fetched, how
+	// many were found in the page rather than linked as scripts, and what
+	// they are matched by.
+	gtmKeys       map[string]bool
+	gtmDiscovered int
+	gtm           []*gtmEvidence
 }
 
 // NewAssetFetcher creates a new AssetFetcher instance. onAsset is called
@@ -68,6 +75,7 @@ func NewAssetFetcher(baseURL string, ctx context.Context, wg *sync.WaitGroup, ma
 		maxWorkers: maxWorkers,
 		semaphore:  make(chan struct{}, maxWorkers),
 		dnsRecords: make(map[string][]string),
+		gtmKeys:    make(map[string]bool),
 	}
 	af.budget.Store(maxFetchedBytes)
 	return af
@@ -94,6 +102,12 @@ func (af *AssetFetcher) Stop() {
 // AddURL adds an asset URL to be fetched
 // This is a convenience method that can be used instead of sending directly to the channel
 func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
+	if assetType == "script" {
+		if key := googleTagKey(url); key != "" {
+			af.addGoogleTag(url, key, false)
+			return
+		}
+	}
 	// A page may link an asset more than once; fetch it once.
 	af.mutex.Lock()
 	seen := af.added[url]
@@ -117,6 +131,42 @@ func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
 	}
 }
 
+// AddGTMContainer fetches the GTM container with the given id, found in the
+// page, unless it is already fetched or maxGTMContainers have been.
+func (af *AssetFetcher) AddGTMContainer(id string) {
+	af.addGoogleTag(gtmContainerURL(id), "gtm.js?id="+id, true)
+}
+
+// addGoogleTag fetches the Google tag container at rawURL as a "gtm" asset,
+// once per key. Containers don't go through urlChan, so they can be added
+// at any time before wg is waited on, even after Stop.
+func (af *AssetFetcher) addGoogleTag(rawURL, key string, discovered bool) {
+	af.mutex.Lock()
+	if af.gtmKeys[key] || discovered && af.gtmDiscovered >= maxGTMContainers {
+		af.mutex.Unlock()
+		return
+	}
+	af.gtmKeys[key] = true
+	if discovered {
+		af.gtmDiscovered++
+	}
+	af.mutex.Unlock()
+	if af.ctx.Err() != nil {
+		return
+	}
+	// Count it before starting it, so a Wait can't return first.
+	af.wg.Add(1)
+	go af.processURL(AssetURL{URL: rawURL, Type: "gtm", Priority: 5})
+}
+
+// GTMEvidence returns what the fetched containers are matched by. Call it
+// after wg is waited on.
+func (af *AssetFetcher) GTMEvidence() []*gtmEvidence {
+	af.mutex.Lock()
+	defer af.mutex.Unlock()
+	return af.gtm
+}
+
 // processURL fetches a single URL and hands its content to onAsset.
 func (af *AssetFetcher) processURL(assetURL AssetURL) {
 	defer af.wg.Done()
@@ -136,7 +186,8 @@ func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	case <-af.ctx.Done():
 		return ""
 	}
-	if af.budget.Load() <= 0 {
+	// Containers are bounded by maxGTMBytes instead.
+	if assetURL.Type != "gtm" && af.budget.Load() <= 0 {
 		return ""
 	}
 
@@ -156,7 +207,7 @@ func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5931.0 Safari/537.36")
 	var types []string
 	switch assetURL.Type {
-	case "script":
+	case "script", "gtm":
 		req.Header.Set("Accept", "*/*")
 		types = []string{"javascript", "text/plain"}
 	case "style":
@@ -175,6 +226,10 @@ func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	// Some servers misconfigure scripts and stylesheets as text/plain.
 	contentType := resp.Header.Get("Content-Type")
 	if !strings.Contains(contentType, types[0]) && !strings.Contains(contentType, types[1]) {
+		return ""
+	}
+	if assetURL.Type == "gtm" {
+		af.handleGTMResponse(resp)
 		return ""
 	}
 	// What was read before an error (a timeout in a large body) is
@@ -196,6 +251,21 @@ func (af *AssetFetcher) resolveURL(rawURL string) (string, error) {
 	}
 
 	return base.ResolveReference(ref).String(), nil
+}
+
+// handleGTMResponse reads the configuration of a Google tag container.
+func (af *AssetFetcher) handleGTMResponse(resp *http.Response) {
+	if resp.StatusCode != http.StatusOK || !strings.Contains(resp.Header.Get("Content-Type"), "javascript") {
+		return
+	}
+	c, err := readGTMContainer(resp.Body)
+	if err != nil {
+		return
+	}
+	ev := c.evidence()
+	af.mutex.Lock()
+	af.gtm = append(af.gtm, ev)
+	af.mutex.Unlock()
 }
 
 // SetDNSRecords stores DNS records found through lookup

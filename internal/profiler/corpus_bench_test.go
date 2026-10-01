@@ -123,6 +123,10 @@ func TestCorpusFetch(t *testing.T) {
 			}
 		})
 		assets = append(assets, asset{"/robots.txt", "robots"})
+		// GTM containers that the page refers to, which analysis fetches.
+		for _, id := range gtmContainerIDs(body, maxGTMContainers) {
+			assets = append(assets, asset{gtmContainerURL(id), "script"})
+		}
 
 		var mu sync.Mutex
 		var wg sync.WaitGroup
