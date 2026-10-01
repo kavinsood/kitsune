@@ -1,0 +1,19 @@
+internal/profiler/jsglobals.go
+  s_1138b64f8109c9::t_9e5c1c1f2c6fe5 18-19,39-54,62-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0abb7f864cbc543ef8bc6a397c10fb93d6d3452b",
+  "prompts": {},
+  "sessions": {
+    "s_1138b64f8109c9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7b62a87-2bc3-4198-8c67-7bd4d3ca2f50",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
