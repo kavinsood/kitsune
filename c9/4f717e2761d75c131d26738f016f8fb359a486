@@ -1,0 +1,21 @@
+DESIGN.md
+  s_7b48d03f44c334::t_440f21ec47a350 22,24,26,28-32
+README.md
+  s_7b48d03f44c334::t_2a31a3bc60213d 151-177
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c94f717e2761d75c131d26738f016f8fb359a486",
+  "prompts": {},
+  "sessions": {
+    "s_7b48d03f44c334": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5a25a13ce1c3855a",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
