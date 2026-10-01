@@ -14,9 +14,10 @@ import (
 
 const (
 	// maxAssetBytes is how much of a fetched script or stylesheet is read
-	// and matched. Bundles of several MB are common, and the libraries in
-	// them can be anywhere.
-	maxAssetBytes = 4 << 20
+	// and matched. Libraries can be anywhere in a bundle, but on Workers
+	// reading 4MB instead of 1MB doubled the CPU time of heavy pages (and
+	// added up to 1.5s) for one more library found in the truth set.
+	maxAssetBytes = 1 << 20
 	// maxFetchedBytes is how much is read of all the scripts and
 	// stylesheets of a page together. It bounds the time spent matching
 	// them and, as each is matched when it arrives and then dropped, the
