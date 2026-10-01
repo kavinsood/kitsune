@@ -1,0 +1,195 @@
+{
+    "_comment": "Kitsune's own fixes and additions, applied last over the merged sources by cmd/update-fingerprints (schema in cmd/update-fingerprints/overrides.go). remove runs first, then set, then add. Patterns are Wappalyzer-format and must be valid RE2; the engine matches them case-insensitively.",
+    "remove": {
+        "Apple iCloud Mail": {
+            "_comment": "apple-domain= TXT records verify any Apple service (Apple Business, Sign in with Apple), not iCloud Mail.",
+            "dns": {"TXT": "apple-domain"}
+        },
+        "WebsiteBuilder": {
+            "_comment": "Matched any generator ending in 'Website Builder' (Wix, GoDaddy, Hostinger, ...).",
+            "meta": {"generator": "^[\\w\\s.&-]{0,40}\\bWebsite Builder$"}
+        },
+        "Ruby on Rails": {
+            "_comment": "_session_id is the default session cookie of many frameworks (PHP apps, Express, Java).",
+            "cookies": {"_session_id": ""}
+        },
+        "Joomla": {
+            "_comment": "Generic ids and classes that other sites use; the html pattern still covers Joomla's own markup.",
+            "dom": ["div[id*='wrapper_r']", "table[class*='pill']"]
+        },
+        "Cart Functionality": {
+            "_comment": "Substring matches: /order matched /orders-history, /ordering; /cart matched /cartography; class*='checkout' matched any checkout text. Replaced in add with anchored rules.",
+            "dom": ["a[href*='/cart']", "a[href*='/order']", "a[href*='/bag/']", "a[href*='/basket']", "a[href*='/checkout']", "[class*='checkout']"],
+            "url": "/(?:cart|order|basket|trolley|bag|shoppingbag|checkout)"
+        },
+        "Fourthwall": {
+            "_comment": "Took the version of any page with <meta name=version>.",
+            "meta": {"version": "^(.+)$\\;version:\\1\\;confidence:0"}
+        },
+        "Google Tag Manager": {
+            "_comment": "Any script from googletagmanager.com, including gtag.js for Google Analytics, which isn't GTM.",
+            "scriptSrc": ["\\.googletagmanager\\.com/", "\\.googletagmanager\\.com/(gtm\\.js)?"]
+        },
+        "Cloudflare": {
+            "_comment": "NS/SOA on cloudflare.com is Cloudflare DNS, which has its own tech; DNS alone doesn't mean the CDN proxies the site.",
+            "dns": {"NS": "", "SOA": ""}
+        },
+        "jQuery": {
+            "_comment": "Bare 'jquery' matched any plugin (jquery.cookie.js, jquery-ui.js).",
+            "scriptSrc": "jquery"
+        },
+        "Vue.js": {
+            "_comment": "data-v- / data-vue- attributes are also used by other libraries and analytics tags; replaced by the scoped-CSS hash form.",
+            "html": "<[^>]+\\sdata-v(?:ue)?-"
+        },
+        "Snowplow Analytics": {
+            "_comment": "Bare sp.js matched any script named like *sp.js (wsp.js, asp.js).",
+            "scriptSrc": "sp\\.js\\;confidence:50"
+        }
+    },
+    "set": {
+        "Lightbox": {
+            "_comment": "Was any script with 'lightbox' in its name (fancybox-lightbox, lightbox2 plugins of other libraries).",
+            "scriptSrc": ["(?:^|/)lightbox(?:-plus-jquery)?(?:\\.min)?\\.js"]
+        },
+        "Element UI": {
+            "_comment": "Anchor the class to a whole class name; el-button matched e.g. panel-button and model-select.",
+            "dom": {
+                "[class*='el-']": {
+                    "attributes": {
+                        "class": "(?:^|\\s)el-(?:table|table-column|pagination|pager|form|form-item|color-picker|badge|tree|tree-node|select|select-dropdown|message|message-box|dialog|checkbox|checkbox-group|container|steps|step|carousel|menu|menu-item|submenu|button|button-group|card|row|col-[0-9]+|tabs|tab-pane|notification|radio|radio-group|radio-button|progress|tag|popover|tooltip|cascader|transfer|rate|slider|dropdown|dropdown-menu|textarea|input|input-group|input-number|main|breadcrumb|date-editor|date-picker|picker-panel|collapse|collapse-item|alert|scrollbar|switch|upload|aside|header|footer|autocomplete|loading-mask|loading-spinner|icon-[a-z-]+)(?:\\s|$)"
+                    }
+                }
+            }
+        },
+        "RxJS": {
+            "_comment": "Was any rx*.js (e.g. prefix.js, apex.js via the optional parts).",
+            "scriptSrc": ["(?:^|/)rx(?:\\.(?:all|lite|core|umd))?(?:\\.compat|\\.global)?(?:\\.min)?\\.js", "/rxjs(?:@([\\d.]+))?/\\;version:\\1"]
+        },
+        "RequireJS": {
+            "_comment": "Was require.*\\.js, which matched any script with 'require' anywhere before a .js.",
+            "scriptSrc": ["(?:^|/)require(?:-?([\\d.]+))?(?:\\.min)?\\.js\\;version:\\1", "/requirejs(?:@|/)([\\d.]+)/\\;version:\\1"]
+        },
+        "Chart.js": {
+            "scriptSrc": ["/chart(?:\\.bundle|\\.umd)?(?:\\.min)?\\.js\\;confidence:75", "cdn\\.jsdelivr\\.net/(?:npm|gh/chartjs)/chart\\.js@([\\d.]+(?:-[^/]+)?|latest)/dist/Chart.*\\.js\\;version:\\1", "cdnjs\\.cloudflare\\.com/ajax/libs/Chart\\.js/([\\d.]+(?:-[^/]+)?)/Chart.*\\.js\\;version:\\1", "chartjs\\.org/dist/([\\d.]+(?:-[^/]+)?|master|latest)/Chart.*\\.js\\;version:\\1"]
+        },
+        "Tiki Wiki CMS Groupware": {
+            "_comment": "Was (?:/|_)tiki, which matched e.g. /tikitoki and _tiktok paths.",
+            "scriptSrc": ["/(?:lib/)?tiki-(?:js|jquery)[^/]*\\.js", "/tiki/(?:lib|vendor)/"]
+        },
+        "Bootstrap": {
+            "_comment": "The version captures took any 7-40 hex characters, so cache-busting hashes became versions; keep numeric versions only.",
+            "html": ["<link[^>]* href=[^>]*?bootstrap(?:[^>]*?(\\d+\\.\\d+(?:\\.\\d+)?))?[^>-]*?(?:\\.min)?\\.css\\;version:\\1", "<style>\\s+/\\*!\\s+\\* Bootstrap v(\\d\\.\\d\\.\\d)\\;version:\\1"],
+            "scriptSrc": ["(?:/|-)bootstrap(?:[^/]*?(\\d+\\.\\d+(?:\\.\\d+)?))?[^/]*?(?:\\.min)?\\.js\\;version:\\1", "/bootstrap(?:\\.bundle)?(?:\\.min)?\\.js"]
+        },
+        "Font Awesome": {
+            "_comment": "The class check took any fa-* class (fa-ce, fa-de used by other icon sets); require Font Awesome's own style prefixes. The scriptSrc version capture took hex hashes.",
+            "dom": {
+                "[class*='fa']": {
+                    "attributes": {
+                        "class": "(?:^|\\s)(?:fa|fas|far|fal|fat|fad|fab|fa-solid|fa-regular|fa-light|fa-thin|fa-duotone|fa-brands|fa-sharp)(?:\\s+fa-[a-z0-9-]+)+(?:\\s|$)"
+                    }
+                }
+            },
+            "scriptSrc": ["/(?:font|fort)-?awesome(?:-free|-pro)?/(\\d+\\.\\d+(?:\\.\\d+)?)/[^?#]*\\.js\\;version:\\1", "(?:/|-|\\.|@)(?:font|fort)-?awesome[^/]*\\.js", "\\.fontawesome\\.com/([0-9a-z]+)\\.js"]
+        }
+    },
+    "add": {
+        "Cart Functionality": {
+            "dom": [
+                "a[href$='/cart']", "a[href*='/cart?']", "a[href*='/cart/']", "a[href$='/cart.php']",
+                "a[href$='/basket']", "a[href*='/basket/']", "a[href*='/basket?']",
+                "a[href$='/bag']", "a[href*='/bag/']",
+                "a[href$='/checkout']", "a[href*='/checkout/']", "a[href*='/checkout?']",
+                "[class~='cart']", "[class~='mini-cart']", "[class~='minicart']", "[class~='header-cart']", "[class~='cart-count']", "[class~='checkout-button']"
+            ],
+            "url": "/(?:cart|basket|trolley|bag|shoppingbag|checkout)(?:/|\\?|\\.php|$)"
+        },
+        "Google Tag Manager": {
+            "html": ["googletagmanager\\.com/gtm\\.js", "['\"]GTM-[A-Z0-9]{4,}['\"]", "googletagmanager\\.com/ns\\.html\\?id=GTM-[A-Z0-9]{4,}"]
+        },
+        "PublishPress Blocks": {
+            "_comment": "Fixed form of a source selector that doesn't parse.",
+            "dom": "link[href*='/wp-content/plugins/advanced-gutenberg/']"
+        },
+        "Next.js": {
+            "dom": ["script#__NEXT_DATA__", "div#__next", "next-route-announcer"],
+            "headers": {"x-nextjs-cache": "", "x-nextjs-prerender": "", "x-nextjs-stale-time": "", "x-nextjs-matched-path": ""},
+            "html": ["<script[^>]+id=\"__NEXT_DATA__\"", "self\\.__next_f\\.push\\(", "<link[^>]+href=\"[^\"]*/_next/static/"],
+            "scriptSrc": "/_next/static/chunks/"
+        },
+        "Nuxt.js": {
+            "dom": ["#__nuxt", "script#__NUXT_DATA__", "nuxt-link"],
+            "headers": {"x-nuxt-no-ssr": ""},
+            "html": ["<script[^>]+id=\"__NUXT_DATA__\"", "<link[^>]+href=\"[^\"]*/_nuxt/"]
+        },
+        "React Router": {
+            "js": {"__reactRouterContext": "", "__reactRouterManifest": "", "__reactRouterRouteModules": ""},
+            "html": "window\\.__reactRouter(?:Context|Manifest)\\s*="
+        },
+        "Remix": {
+            "html": "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
+        },
+        "Vue.js": {
+            "html": "<[^>]+\\sdata-v-[0-9a-f]{8}(?:[\\s=>/])"
+        },
+        "VitePress": {
+            "dom": ["#VPContent", ".VPNav", ".VPDoc"],
+            "html": "<div[^>]+id=\"VPContent\"",
+            "meta": {"generator": "^VitePress v?([\\d.]+(?:-[\\w.]+)?)\\;version:\\1"}
+        },
+        "Astro": {
+            "dom": ["astro-island", "astro-slot"],
+            "html": ["<astro-island\\s", "<[^>]+\\sdata-astro-cid-[a-z0-9]+"]
+        },
+        "SvelteKit": {
+            "dom": ["[data-sveltekit-preload-data]", "[data-sveltekit-preload-code]", "[data-sveltekit-reload]"],
+            "html": ["__sveltekit_[a-z0-9]+\\s*=", "<link[^>]+href=\"[^\"]*/_app/immutable/"],
+            "scriptSrc": "/_app/immutable/(?:entry|chunks|nodes)/"
+        },
+        "Angular": {
+            "html": ["<[^>]+\\sng-version=\"([\\d.]+)\"\\;version:\\1", "<[^>]+\\s_ngcontent-(?:ng-)?[a-z0-9]+-c\\d+", "<[^>]+\\s_nghost-(?:ng-)?[a-z0-9]+"]
+        },
+        "Htmx": {
+            "dom": ["[hx-get]", "[hx-post]", "[hx-boost]", "[hx-trigger]", "[data-hx-get]", "[data-hx-post]"],
+            "scriptSrc": ["/htmx(?:\\.min)?\\.js", "htmx\\.org@([\\d.]+)\\;version:\\1"]
+        },
+        "Alpine.js": {
+            "dom": ["[x-cloak]"],
+            "scriptSrc": ["alpinejs@([\\d.]+)\\;version:\\1", "/alpinejs/dist/cdn(?:\\.min)?\\.js"]
+        },
+        "Turbo": {
+            "dom": ["turbo-frame", "turbo-stream-source", "meta[name='turbo-visit-control']", "meta[name='turbo-cache-control']"],
+            "html": "<turbo-frame\\s",
+            "scriptSrc": ["@hotwired/turbo(?:@([\\d.]+))?\\;version:\\1", "/turbo(?:\\.es2017-umd|\\.es2017-esm)?(?:\\.min)?\\.js"]
+        },
+        "Fastly": {
+            "headers": {"x-served-by": "^cache-[a-z0-9-]+", "x-timer": "^S\\d+\\.\\d+,VS\\d"}
+        },
+        "Segment": {
+            "html": ["cdn\\.segment\\.(?:com|io)/analytics\\.js/v1/", "cdn\\.segment\\.(?:com|io)/analytics-next/"]
+        },
+        "Google Analytics": {
+            "html": ["googletagmanager\\.com/gtag/js\\?id=(?:G|UA)-[A-Z0-9-]+", "www\\.google-analytics\\.com/analytics\\.js", "gtag\\(\\s*['\"]config['\"]\\s*,\\s*['\"](?:G|UA)-[A-Z0-9-]+"]
+        },
+        "Hotjar": {
+            "js": {"_hjSettings": ""},
+            "html": ["static\\.hotjar\\.com/c/hotjar-", "_hjSettings\\s*=\\s*\\{\\s*hjid"]
+        },
+        "OneTrust": {
+            "dom": ["#onetrust-consent-sdk", "#onetrust-banner-sdk"],
+            "cookies": {"optanonalertboxclosed": ""},
+            "js": {"OneTrust": "", "OptanonActiveGroups": ""}
+        },
+        "Contentful": {
+            "dom": ["img[src*='images.ctfassets.net']", "source[srcset*='images.ctfassets.net']"]
+        },
+        "Algolia DocSearch": {
+            "dom": [".DocSearch-Button", "#docsearch", "link[href*='@docsearch/css']"],
+            "scriptSrc": ["@docsearch/js@([\\d.]+)\\;version:\\1", "/docsearch(?:\\.min)?\\.js"]
+        },
+        "Payload CMS": {
+            "html": "<[^>]+(?:src|href)=\"[^\"]*/api/media/file/"
+        }
+    }
+}

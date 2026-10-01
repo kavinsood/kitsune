@@ -1,0 +1,5 @@
+# Lint errors accepted by update-fingerprints -accept-lint: kind, tech, detail.
+# New errors fail the update; fix them or accept them.
+selector-dropped	Influx CMS	"a[href*='www.influxmarketing.com'] > svg[class*='influx-footer-logo'": unexpected EOF in attribute selector
+selector-dropped	Linguise	"script[type='linguise/json]": EOF in string
+selector-dropped	PublishPress Blocks	"link[href*='/wp-content/plugins/advanced-gutenberg/assets/css/blocks.css?ver=([\\d\\.]+))?": EOF in string
