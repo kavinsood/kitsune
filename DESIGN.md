@@ -19,13 +19,17 @@ I made this happen by:
 
 I built a pipeline in Go to create that `fingerprints_data.json` file. I decided that updating the data should be a manual task for a developer, not some fragile CI job. This way, a human always reviews the changes with a `git diff` before they're committed.
 
-Here's how it works when I run `go run ./cmd/update-fingerprints/main.go`:
+Here's how it works when I run `go run ./cmd/update-fingerprints`:
 
-1.  **Fetch:** It grabs the latest Wappalyzer extension `.xpi` file from Mozilla. I decided to use this as the single source of truth instead of trying to pull from multiple places. The tool just reads the archive in memory and merges all the `technologies/*.json` files.
+1.  **Fetch:** It loads three Wappalyzer-format sources, ranked highest first. The first is the latest Wappalyzer extension `.xpi` from Mozilla. The other two are `enthec/webappanalyzer` and `HTTPArchive/wappalyzer`, each at a pinned commit. No single source covers everything, so it merges all three for coverage. Each archive is read in memory, and its `technologies/*.json` files are merged.
 
-2.  **Normalize:** This is where the magic happens. Wappalyzer's data can be a bit loose (like a field being a string *or* an array). My tool forces everything into the strict Go types I need at runtime. For example, if it sees a single string pattern, it just turns it into an array with one item.
+2.  **Normalize:** Wappalyzer's data can be a bit loose (like a field being a string *or* an array). The tool forces each source into one strict shape. Header, cookie and meta names are lowercased, and dom rules take their object form. Patterns written for JavaScript's regex engine are rewritten into RE2 where the meaning allows. Patterns and selectors that still don't compile are dropped.
 
-3.  **Lint:** As a final check, the tool tries to compile every single regex. If they all work, it writes the final `fingerprints_data.json` and `categories_data.json` files. If anything fails, it stops.
+3.  **Merge:** Patterns are unioned across sources. Single values (a header's pattern, a dom check, categories, gates such as `requires`) come from the highest-ranked source that has them.
+
+4.  **Override:** `assets/overrides.json` is kitsune's own layer of fixes and additions, applied last.
+
+5.  **Lint:** The tool checks the result: references to missing techs or categories, techs that lost every pattern, patterns that match anything, and over-generic selectors. It writes `fingerprints_data.json` and `categories_data.json`. Lint errors not accepted in `assets/lint_baseline.txt` fail the run.
 
 -----
 

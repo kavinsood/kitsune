@@ -148,8 +148,33 @@ recent request events (CPU time, memory, cold starts) in KV.
 
 Kitsune's reliability comes from its unique data pipeline.
 
-  * **Data Source:** Fingerprints are sourced directly from the official Wappalyzer browser extension (`.xpi` file), ensuring the data is canonical and comprehensive.
-  * **Offline Pipeline:** A Go-based utility in `cmd/update-fingerprints` handles fetching, normalizing, and linting this data. It converts the flexible source schema into a strict, pre-validated format that the runtime can use safely and efficiently.
+  * **Data Sources:** The fingerprints (`assets/fingerprints_data.json`, `assets/categories_data.json`) merge three Wappalyzer-format sources, ranked highest first:
+    1. the latest Wappalyzer Firefox extension (`.xpi`) from addons.mozilla.org;
+    2. [enthec/webappanalyzer](https://github.com/enthec/webappanalyzer), at a pinned commit;
+    3. [HTTPArchive/wappalyzer](https://github.com/HTTPArchive/wappalyzer), at a pinned commit.
+
+    A tech's patterns are unioned across the sources. Where sources disagree on a single value (a header's pattern, a dom check, the categories, the description), the higher-ranked source wins.
+  * **Overrides:** `assets/overrides.json` holds kitsune's own fixes and additions: noisy patterns removed or narrowed, and rules added for modern frameworks. It is applied on top of the merged sources and can `remove`, `set` and `add` fields per tech. Its schema is documented in `cmd/update-fingerprints/overrides.go`.
+  * **Offline Pipeline:** `cmd/update-fingerprints` fetches, normalizes, merges and lints the data. It rewrites JavaScript-only regex syntax into RE2 where the meaning allows, and drops what still doesn't compile. It also checks references between techs, categories, selectors and over-broad patterns. Lint errors not listed in `assets/lint_baseline.txt` fail the run.
+
+#### Updating the fingerprints
+
+```sh
+go run ./cmd/update-fingerprints     # download the sources, merge, lint, write assets/
+go generate ./internal/profiler      # regenerate the compiled fingerprints
+go test ./...
+```
+
+Useful flags:
+
+  * `-enthec-ref` and `-httparchive-ref` move the pinned commits; they also accept branch names.
+  * `-extension`, `-enthec` and `-httparchive` use local copies (directories or `.xpi`/`.zip` archives) instead of downloading.
+  * `-sources` picks the sources and their ranking.
+  * `-v` prints every lint finding.
+  * `-accept-lint` accepts the current lint errors into the baseline.
+  * `-corpus dir` runs the new data over saved pages and lists techs detected on too many of them.
+
+To fix a tech, edit `assets/overrides.json` rather than the generated JSON.
 
 For a deep dive into the engineering decisions, see [DESIGN.md](DESIGN.md).
 
