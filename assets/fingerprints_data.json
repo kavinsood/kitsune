@@ -27936,7 +27936,9 @@
                 36
             ],
             "scripts": [
-                "fls\\.doubleclick\\.net"
+                "fls\\.doubleclick\\.net",
+                "gtm:tag __fl[cs] ",
+                "gtm:tag __googtag [^\\n]*id:DC-\\d{6,}"
             ],
             "scriptSrc": [
                 "\\.doubleclick\\.net",
@@ -40831,6 +40833,9 @@
             "cats": [
                 36
             ],
+            "scripts": [
+                "gtm:tag __sp "
+            ],
             "description": "Google Ads is an online advertising platform developed by Google.",
             "website": "https://ads.google.com",
             "icon": "Google Ads.svg"
@@ -40843,10 +40848,13 @@
                 "google_trackConversion": ""
             },
             "scripts": [
-                "gtag\\([^)]+'(AW-)"
+                "gtag\\([^)]+'(AW-)",
+                "gtm:tag __awct ",
+                "gtm:tag __googtag [^\\n]*id:AW-\\d{6,}"
             ],
             "scriptSrc": [
-                "\\.googleadservices\\.com/pagead/conversion_async\\.js"
+                "\\.googleadservices\\.com/pagead/conversion_async\\.js",
+                "googletagmanager\\.com/gtag/js\\?id=AW-\\d{6,}"
             ],
             "implies": [
                 "Google Ads"
@@ -40883,7 +40891,9 @@
             ],
             "scripts": [
                 "gtag\\([^)]+'(G-)\\;version:\\1?GA4:",
-                "gtag\\([^)]+'(UA-)\\;version:\\1?UA:"
+                "gtag\\([^)]+'(UA-)\\;version:\\1?UA:",
+                "gtm:tag __(?:googtag|gaawc|gaawe) [^\\n]*id:G-[A-Z0-9]{6,}",
+                "gtm:tag __ua "
             ],
             "scriptSrc": [
                 "google-analytics\\.com/(?:ga|urchin|analytics)\\.js",
@@ -44965,6 +44975,9 @@
             "html": [
                 "_hjSettings\\s*=\\s*\\{\\s*hjid",
                 "static\\.hotjar\\.com/c/hotjar-"
+            ],
+            "scripts": [
+                "gtm:tag __hjtc "
             ],
             "scriptSrc": [
                 "//static\\.hotjar\\.com/"
@@ -54812,7 +54825,8 @@
                 "content-security-policy": "\\.licdn\\.com\\;confidence:25"
             },
             "scripts": [
-                "_linkedin_partner_id"
+                "_linkedin_partner_id",
+                "gtm:tag __bzi "
             ],
             "scriptSrc": [
                 "cdn\\.oribi\\.io",
@@ -60616,6 +60630,9 @@
                 "UET": "",
                 "uetq": ""
             },
+            "scripts": [
+                "gtm:tag __baut "
+            ],
             "scriptSrc": [
                 "bat\\.bing\\.com/bat\\.js"
             ],
@@ -73217,6 +73234,9 @@
             "js": {
                 "pintrk": ""
             },
+            "scripts": [
+                "gtm:tag __pntr "
+            ],
             "description": "Pinterest Conversion Tag allows you to track actions people take on a website after viewing your Promoted Pin.",
             "website": "https://www.pinterest.com.au/business/",
             "icon": "Pinterest.svg"
@@ -101848,6 +101868,9 @@
             },
             "scripts": [
                 "_tiktok_sdkid"
+            ],
+            "scriptSrc": [
+                "//analytics\\.tiktok\\.com/"
             ],
             "xhr": [
                 "analytics\\.tiktok\\.com"
