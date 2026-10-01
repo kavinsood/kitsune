@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,13 +31,29 @@ const (
 	// requests. Real pages link fewer (stripe.com, 77 scripts).
 	maxScripts = 100
 	maxStyles  = 20
+	// maxPreloads bounds how many more scripts are fetched for a page
+	// because it preloads them (see AddPreloads). Bundlers like Vite list
+	// a page's chunks, bundled libraries included, only as preloads:
+	// remix.run has 133, nuxt.com 142, allbirds.com 167.
+	maxPreloads = 30
 )
+
+// sharedChunkNames are parts of file names that mark a preloaded chunk as
+// likely shared, vendor or framework code, where bundled libraries are:
+// vendor-x.js, chunk-vendors.x.js, framework-x.js, jsx-runtime-x.js,
+// entry.client-x.js, _app-x.js, or index-x.js (Vite and Rollup name a
+// shared chunk after its first module, often an index).
+var sharedChunkNames = []string{
+	"vendor", "framework", "react", "vue", "lib", "polyfill", "runtime",
+	"shared", "common", "entry", "app", "main", "index",
+}
 
 // AssetURL represents an asset to be fetched with its type
 type AssetURL struct {
 	URL      string // The URL of the asset
 	Type     string // "script" or "style"
-	Priority int    // Priority for processing (higher numbers are processed first)
+	Priority int    // Not used for scheduling; preloads wait instead (see AddPreloads)
+	preload  bool   // Fetched only because the page preloads it
 }
 
 // AssetFetcher manages concurrent fetching of external assets
@@ -55,6 +73,7 @@ type AssetFetcher struct {
 	added      map[string]bool                 // URLs added, guarded by mutex
 	scripts    int                             // Scripts added, guarded by mutex
 	styles     int                             // Stylesheets added, guarded by mutex
+	waiting    sync.WaitGroup                  // Scripts and stylesheets added not yet holding a fetch slot
 
 	// Google tag containers (see gtm.go): the keys of those fetched, how
 	// many were found in the page rather than linked as scripts, and what
@@ -137,13 +156,89 @@ func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
 	// Count the URL in wg before handing it over, so that a Wait after
 	// Stop can't return before it is fetched.
 	af.wg.Add(1)
+	af.waiting.Add(1)
 	select {
 	case af.urlChan <- AssetURL{URL: url, Type: assetType, Priority: priority}:
 		// URL was added successfully
 	case <-af.ctx.Done():
 		// Context was cancelled, don't add more URLs
+		af.waiting.Done()
 		af.wg.Done()
 	}
+}
+
+// AddPreloads fetches as scripts up to maxPreloads of urls, the scripts a
+// page preloads in document order, chosen by selectPreloads among those
+// not already added. Call it once, after all the page's scripts and
+// stylesheets are added: the preloads only start once each of those holds
+// a fetch slot (or is done), so they never delay them. Like containers
+// they don't go through urlChan, so this can be called after Stop.
+func (af *AssetFetcher) AddPreloads(urls []string) {
+	var fresh, tags []string
+	seen := make(map[string]bool)
+	af.mutex.Lock()
+	for _, u := range urls {
+		if seen[u] || af.added[u] {
+			continue
+		}
+		seen[u] = true
+		if googleTagKey(u) != "" {
+			tags = append(tags, u)
+		} else {
+			fresh = append(fresh, u)
+		}
+	}
+	urls = selectPreloads(fresh, maxPreloads)
+	if af.added == nil {
+		af.added = make(map[string]bool)
+	}
+	for _, u := range urls {
+		af.added[u] = true
+	}
+	af.mutex.Unlock()
+	for _, u := range tags {
+		af.addGoogleTag(u, googleTagKey(u), false)
+	}
+	if len(urls) == 0 || af.ctx.Err() != nil {
+		return
+	}
+	af.wg.Add(len(urls))
+	go func() {
+		af.waiting.Wait()
+		for _, u := range urls {
+			go af.processURL(AssetURL{URL: u, Type: "script", Priority: 1, preload: true})
+		}
+	}()
+}
+
+// selectPreloads returns up to n of urls: first those that look like
+// shared chunks (see sharedChunk), then the others, each in the order of
+// urls.
+func selectPreloads(urls []string, n int) []string {
+	if len(urls) <= n {
+		return urls
+	}
+	ranked := append([]string(nil), urls...)
+	sort.SliceStable(ranked, func(i, j int) bool {
+		return sharedChunk(ranked[i]) && !sharedChunk(ranked[j])
+	})
+	return ranked[:n]
+}
+
+// sharedChunk reports whether the file name of rawURL contains one of
+// sharedChunkNames, ignoring case.
+func sharedChunk(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	name := strings.ToLower(path.Base(u.Path))
+	for _, s := range sharedChunkNames {
+		if strings.Contains(name, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // AddGTMContainer fetches the GTM container with the given id, found in the
@@ -199,8 +294,10 @@ func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	case af.semaphore <- struct{}{}:
 		defer func() { <-af.semaphore }()
 	case <-af.ctx.Done():
+		af.doneWaiting(assetURL)
 		return ""
 	}
+	af.doneWaiting(assetURL)
 	// Containers are bounded by maxGTMBytes instead.
 	if assetURL.Type != "gtm" && af.budget.Load() <= 0 {
 		return ""
@@ -251,6 +348,14 @@ func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	// matched as well.
 	content, _ := readString(resp, maxAssetBytes, &af.budget)
 	return content
+}
+
+// doneWaiting marks a page's script or stylesheet as no longer waiting
+// for a fetch slot, which preloads wait for.
+func (af *AssetFetcher) doneWaiting(assetURL AssetURL) {
+	if assetURL.Type != "gtm" && !assetURL.preload {
+		af.waiting.Done()
+	}
 }
 
 // resolveURL converts a possibly relative URL to absolute

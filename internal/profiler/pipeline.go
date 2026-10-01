@@ -19,7 +19,7 @@ func (s *Wappalyze) AnalyzeWithPipeline(resp *http.Response, body []byte) richRe
 // analyzeWithPipeline matches everything known about a page: its URL,
 // headers, cookies, TLS certificate, HTML, and the DNS records of its host
 // and the scripts and stylesheets it links to, which are fetched
-// concurrently as soon as they are found.
+// concurrently as soon as they are found, then the scripts it preloads.
 func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richResult {
 	var pageURL *url.URL
 	if resp != nil && resp.Request != nil && resp.Request.URL != nil {

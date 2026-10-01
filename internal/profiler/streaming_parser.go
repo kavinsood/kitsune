@@ -23,7 +23,8 @@ const (
 // analyzeHTML parses body and matches it: the html, its meta tags, dom,
 // script srcs, inline scripts and styles, and visible text. Script and
 // stylesheet URLs, resolved against base (the URL of the page, which may be
-// nil), are sent to fetcher. It returns the matches and the page title.
+// nil), are sent to fetcher, and then those of the scripts it preloads.
+// It returns the matches and the page title.
 func (s *Wappalyze) analyzeHTML(body []byte, base *url.URL, fetcher *AssetFetcher) ([]matchPartResult, string) {
 	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 	if err != nil {
@@ -85,6 +86,8 @@ func (s *Wappalyze) analyzeHTML(body []byte, base *url.URL, fetcher *AssetFetche
 			fetcher.AddURL(abs, "style", 3)
 		}
 	})
+	// After the page's own scripts and stylesheets, which go first.
+	fetcher.AddPreloads(scriptPreloads(doc, base))
 
 	var styles strings.Builder
 	doc.Find("style").Each(func(_ int, el *goquery.Selection) {
@@ -104,6 +107,28 @@ func (s *Wappalyze) analyzeHTML(body []byte, base *url.URL, fetcher *AssetFetche
 
 	title := strings.TrimSpace(doc.Find("title").First().Text())
 	return technologies, title
+}
+
+// scriptPreloads returns the URLs of the scripts doc preloads, resolved
+// against base, in document order: those of <link rel=modulepreload> (whose
+// as defaults to script) and <link rel=preload as=script>. Imports in the
+// scripts themselves aren't followed.
+func scriptPreloads(doc *goquery.Document, base *url.URL) []string {
+	var urls []string
+	doc.Find("link[href]").Each(func(_ int, el *goquery.Selection) {
+		rel, _ := el.Attr("rel")
+		as, _ := el.Attr("as")
+		as = strings.TrimSpace(as)
+		if !(hasToken(rel, "modulepreload") && (as == "" || strings.EqualFold(as, "script")) ||
+			hasToken(rel, "preload") && strings.EqualFold(as, "script")) {
+			return
+		}
+		href, _ := el.Attr("href")
+		if abs := resolveURL(base, strings.TrimSpace(href)); abs != "" {
+			urls = append(urls, abs)
+		}
+	})
+	return urls
 }
 
 // resolveURL returns ref resolved against base if that gives an absolute
