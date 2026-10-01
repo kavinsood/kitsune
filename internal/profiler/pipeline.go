@@ -38,13 +38,21 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	jsContent := make(map[string]string)
-	cssContent := make(map[string]string)
 	var baseURL string
 	if pageURL != nil {
 		baseURL = pageURL.String()
 	}
-	assetFetcher := NewAssetFetcher(baseURL, ctx, &wg, 10, &jsContent, &cssContent)
+	// Fetched scripts are matched like inline ones, but only their window
+	// assignments create globals.
+	assetFetcher := NewAssetFetcher(baseURL, ctx, &wg, 10, func(assetType, content string) {
+		switch assetType {
+		case "script":
+			add(s.fingerprints.matchString(content, scriptPart, s.regexTimeout))
+			add(s.fingerprints.matchJSGlobals(content, false))
+		case "style":
+			add(s.fingerprints.matchString(content, cssPart, s.regexTimeout))
+		}
+	})
 	assetFetcher.Start()
 
 	if pageURL != nil && pageURL.Hostname() != "" {
@@ -80,16 +88,6 @@ func (s *Wappalyze) analyzeWithPipeline(resp *http.Response, body []byte) richRe
 	// No more URLs will be sent to the fetcher.
 	assetFetcher.Stop()
 	wg.Wait()
-
-	// Fetched scripts are matched like inline ones, but only their window
-	// assignments create globals.
-	for _, content := range jsContent {
-		matches = append(matches, s.fingerprints.matchString(content, scriptPart, s.regexTimeout)...)
-		matches = append(matches, s.fingerprints.matchJSGlobals(content, false)...)
-	}
-	for _, content := range cssContent {
-		matches = append(matches, s.fingerprints.matchString(content, cssPart, s.regexTimeout)...)
-	}
 
 	return s.newRichResult(s.fingerprints.resolve(matches), title)
 }

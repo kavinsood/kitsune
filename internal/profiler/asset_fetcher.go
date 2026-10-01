@@ -7,7 +7,21 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+	"unsafe"
+)
+
+const (
+	// maxAssetBytes is how much of a fetched script or stylesheet is read
+	// and matched. Bundles of several MB are common, and the libraries in
+	// them can be anywhere.
+	maxAssetBytes = 4 << 20
+	// maxFetchedBytes is how much is read of all the scripts and
+	// stylesheets of a page together. It bounds the time spent matching
+	// them and, as each is matched when it arrives and then dropped, the
+	// memory they take.
+	maxFetchedBytes = 16 << 20
 )
 
 // AssetURL represents an asset to be fetched with its type
@@ -20,38 +34,43 @@ type AssetURL struct {
 // AssetFetcher manages concurrent fetching of external assets
 // It provides a channel for receiving URLs and handles all network I/O
 type AssetFetcher struct {
-	baseURL    string              // Base URL for resolving relative paths
-	client     *http.Client        // HTTP client for making requests
-	ctx        context.Context     // Context for cancellation/timeout
-	wg         *sync.WaitGroup     // WaitGroup for tracking goroutines
-	urlChan    chan AssetURL       // Channel for receiving asset URLs to fetch
-	mutex      sync.Mutex          // Mutex for protecting shared maps
-	jsContent  *map[string]string  // Pointer to map of JavaScript content by URL
-	cssContent *map[string]string  // Pointer to map of CSS content by URL
-	maxWorkers int                 // Maximum concurrent requests
-	semaphore  chan struct{}       // Semaphore for limiting concurrent requests
-	dnsRecords map[string][]string // Results from DNS lookups
+	baseURL    string                          // Base URL for resolving relative paths
+	client     *http.Client                    // HTTP client for making requests
+	ctx        context.Context                 // Context for cancellation/timeout
+	wg         *sync.WaitGroup                 // WaitGroup for tracking goroutines
+	urlChan    chan AssetURL                   // Channel for receiving asset URLs to fetch
+	mutex      sync.Mutex                      // Mutex for protecting shared maps
+	onAsset    func(assetType, content string) // Called with each fetched asset
+	budget     atomic.Int64                    // Bytes left to read of all assets (maxFetchedBytes)
+	maxWorkers int                             // Maximum concurrent requests
+	semaphore  chan struct{}                   // Semaphore for limiting concurrent requests
+	dnsRecords map[string][]string             // Results from DNS lookups
+	added      map[string]bool                 // URLs added, guarded by mutex
 }
 
-// NewAssetFetcher creates a new AssetFetcher instance
-func NewAssetFetcher(baseURL string, ctx context.Context, wg *sync.WaitGroup, maxWorkers int, jsContent *map[string]string, cssContent *map[string]string) *AssetFetcher {
+// NewAssetFetcher creates a new AssetFetcher instance. onAsset is called
+// with the type ("script" or "style") and content of each asset fetched,
+// concurrently and as soon as it is read, so that it can be matched and
+// dropped while other assets are being fetched.
+func NewAssetFetcher(baseURL string, ctx context.Context, wg *sync.WaitGroup, maxWorkers int, onAsset func(assetType, content string)) *AssetFetcher {
 	// Create HTTP client with timeout
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 	}
 
-	return &AssetFetcher{
+	af := &AssetFetcher{
 		baseURL:    baseURL,
 		client:     client,
 		ctx:        ctx,
 		wg:         wg,
 		urlChan:    make(chan AssetURL, 50), // Buffered channel to avoid blocking
-		jsContent:  jsContent,
-		cssContent: cssContent,
+		onAsset:    onAsset,
 		maxWorkers: maxWorkers,
 		semaphore:  make(chan struct{}, maxWorkers),
 		dnsRecords: make(map[string][]string),
 	}
+	af.budget.Store(maxFetchedBytes)
+	return af
 }
 
 // Start launches the asset fetcher pipeline
@@ -75,6 +94,17 @@ func (af *AssetFetcher) Stop() {
 // AddURL adds an asset URL to be fetched
 // This is a convenience method that can be used instead of sending directly to the channel
 func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
+	// A page may link an asset more than once; fetch it once.
+	af.mutex.Lock()
+	seen := af.added[url]
+	if af.added == nil {
+		af.added = make(map[string]bool)
+	}
+	af.added[url] = true
+	af.mutex.Unlock()
+	if seen {
+		return
+	}
 	// Count the URL in wg before handing it over, so that a Wait after
 	// Stop can't return before it is fetched.
 	af.wg.Add(1)
@@ -87,54 +117,70 @@ func (af *AssetFetcher) AddURL(url string, assetType string, priority int) {
 	}
 }
 
-// processURL handles fetching and processing of a single URL
+// processURL fetches a single URL and hands its content to onAsset.
 func (af *AssetFetcher) processURL(assetURL AssetURL) {
 	defer af.wg.Done()
+	// Match outside the semaphore, so the next fetch starts meanwhile.
+	if content := af.fetch(assetURL); content != "" {
+		af.onAsset(assetURL.Type, content)
+	}
+}
 
+// fetch returns the content of an asset, or "" if it couldn't be fetched
+// or isn't of the expected type. It holds a slot of the semaphore.
+func (af *AssetFetcher) fetch(assetURL AssetURL) string {
 	// Acquire semaphore to limit concurrency
 	select {
 	case af.semaphore <- struct{}{}:
-		// Acquired semaphore
 		defer func() { <-af.semaphore }()
 	case <-af.ctx.Done():
-		// Context cancelled while waiting for semaphore
-		return
+		return ""
+	}
+	if af.budget.Load() <= 0 {
+		return ""
 	}
 
 	// Resolve relative URLs
 	absoluteURL, err := af.resolveURL(assetURL.URL)
 	if err != nil {
-		return
+		return ""
 	}
 
 	// Create request with context
 	req, err := http.NewRequestWithContext(af.ctx, "GET", absoluteURL, nil)
 	if err != nil {
-		return
+		return ""
 	}
 
 	// Add common headers
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5931.0 Safari/537.36")
-	if assetURL.Type == "script" {
+	var types []string
+	switch assetURL.Type {
+	case "script":
 		req.Header.Set("Accept", "*/*")
-	} else if assetURL.Type == "style" {
+		types = []string{"javascript", "text/plain"}
+	case "style":
 		req.Header.Set("Accept", "text/css,*/*;q=0.1")
+		types = []string{"text/css", "text/plain"}
+	default:
+		return ""
 	}
 
-	// Make the request
 	resp, err := af.client.Do(req)
 	if err != nil {
-		return
+		return ""
 	}
 	defer resp.Body.Close()
 
-	// Handle different asset types
-	switch assetURL.Type {
-	case "script":
-		af.handleScriptResponse(resp, assetURL.URL)
-	case "style":
-		af.handleStyleResponse(resp, assetURL.URL)
+	// Some servers misconfigure scripts and stylesheets as text/plain.
+	contentType := resp.Header.Get("Content-Type")
+	if !strings.Contains(contentType, types[0]) && !strings.Contains(contentType, types[1]) {
+		return ""
 	}
+	// What was read before an error (a timeout in a large body) is
+	// matched as well.
+	content, _ := readString(resp, maxAssetBytes, &af.budget)
+	return content
 }
 
 // resolveURL converts a possibly relative URL to absolute
@@ -152,48 +198,6 @@ func (af *AssetFetcher) resolveURL(rawURL string) (string, error) {
 	return base.ResolveReference(ref).String(), nil
 }
 
-// handleScriptResponse processes a JavaScript response
-func (af *AssetFetcher) handleScriptResponse(resp *http.Response, originalURL string) {
-	// Check if we got a JS response
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "javascript") && !strings.Contains(contentType, "text/plain") {
-		// Skip if not JavaScript content (but allow text/plain as some servers misconfigure JS)
-		return
-	}
-
-	// Read the content with a limit to avoid huge files
-	content, err := readString(resp, 1024*1024) // 1MB limit
-	if err != nil {
-		return
-	}
-
-	// Store the result
-	af.mutex.Lock()
-	(*af.jsContent)[originalURL] = content
-	af.mutex.Unlock()
-}
-
-// handleStyleResponse processes a CSS response
-func (af *AssetFetcher) handleStyleResponse(resp *http.Response, originalURL string) {
-	// Check if we got a CSS response
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "text/css") && !strings.Contains(contentType, "text/plain") {
-		// Skip if not CSS content (but allow text/plain as some servers misconfigure CSS)
-		return
-	}
-
-	// Read the content with a limit to avoid huge files
-	content, err := readString(resp, 1024*1024) // 1MB limit
-	if err != nil {
-		return
-	}
-
-	// Store the result
-	af.mutex.Lock()
-	(*af.cssContent)[originalURL] = content
-	af.mutex.Unlock()
-}
-
 // SetDNSRecords stores DNS records found through lookup
 func (af *AssetFetcher) SetDNSRecords(records map[string][]string) {
 	af.mutex.Lock()
@@ -201,35 +205,62 @@ func (af *AssetFetcher) SetDNSRecords(records map[string][]string) {
 	af.dnsRecords = records
 }
 
-// readString reads at most limit bytes of resp's body into a string. Like
-// io.ReadAll it reads into growing chunks and then assembles an exactly-sized
-// result, but it builds the string directly, so the body isn't copied a
-// second time by string(...).
-func readString(resp *http.Response, limit int64) (string, error) {
-	r := io.LimitReader(resp.Body, limit)
+// readString reads resp's body into a string, up to limit bytes and as
+// many as budget has left, which it takes from budget. If reading fails it
+// returns what was read with the error. Like io.ReadAll it reads into
+// growing chunks and then assembles an exactly-sized result, but it builds
+// the string directly, and uses the chunk itself if there is only one, so
+// the body isn't copied a second time by string(...).
+func readString(resp *http.Response, limit int64, budget *atomic.Int64) (string, error) {
 	next := int64(512)
 	if resp.ContentLength > 0 {
-		next = min(resp.ContentLength+1, limit+1) // +1 to see EOF in one read
+		next = resp.ContentLength + 1 // +1 to see EOF in one read
 	}
 	var chunks [][]byte
-	size := 0
-	for {
-		chunk := make([]byte, next)
-		n, err := io.ReadFull(r, chunk)
-		chunks = append(chunks, chunk[:n])
-		size += n
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
+	var size int64
+	var err error
+	for size < limit {
+		n := takeBudget(budget, min(next, limit-size))
+		if n == 0 {
 			break
 		}
+		chunk := make([]byte, n)
+		var m int
+		m, err = io.ReadFull(resp.Body, chunk)
+		budget.Add(n - int64(m))
+		if m > 0 {
+			chunks = append(chunks, chunk[:m])
+			size += int64(m)
+		}
 		if err != nil {
-			return "", err
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				err = nil
+			}
+			break
 		}
 		next += next / 2
 	}
+	if len(chunks) == 1 && cap(chunks[0])-len(chunks[0]) <= 512 {
+		return unsafe.String(&chunks[0][0], len(chunks[0])), err
+	}
 	var sb strings.Builder
-	sb.Grow(size)
+	sb.Grow(int(size))
 	for _, chunk := range chunks {
 		sb.Write(chunk)
 	}
-	return sb.String(), nil
+	return sb.String(), err
+}
+
+// takeBudget takes up to n bytes from budget, returning how many it took.
+func takeBudget(budget *atomic.Int64, n int64) int64 {
+	for {
+		left := budget.Load()
+		got := min(n, left)
+		if got <= 0 {
+			return 0
+		}
+		if budget.CompareAndSwap(left, left-got) {
+			return got
+		}
+	}
 }
