@@ -1,0 +1,21 @@
+cmd/kitsune-eval/README.md
+  s_3eaa7721cfb89c::t_7ae4ae8481aa43 24
+cmd/kitsune-eval/fetch.go
+  s_3eaa7721cfb89c::t_dd6b7c836b4c48 36-40,52,125-128,191-192,198
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "18212e56750a24e327cb6c7f5c068c623b5e776e",
+  "prompts": {},
+  "sessions": {
+    "s_3eaa7721cfb89c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "18d0c15b-9a5e-4c72-b8e0-cdc8bc523aad",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
