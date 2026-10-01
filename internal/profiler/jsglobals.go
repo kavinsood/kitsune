@@ -15,7 +15,8 @@ import (
 // and, in classic inline scripts, top-level "var X = ...". Only patterns
 // that don't constrain the value are considered (a version capture is
 // fine, a required literal isn't), and no version is reported, as the
-// assigned value isn't known. As the chain itself isn't evaluated, a
+// assigned value isn't known. A chain below a global other techs use too
+// isn't considered. As the chain itself isn't evaluated, a
 // match is only evidence: it gets confidence jsConfidence, and all such
 // evidence for a tech counts once, unless the global's name is distinctive
 // (see distinctiveGlobal).
@@ -35,11 +36,30 @@ type jsTech struct {
 func (f *CompiledFingerprints) jsGlobals() map[string][]jsTech {
 	f.jsGlobalsOnce.Do(func() {
 		f.jsGlobalTechs = make(map[string][]jsTech)
+		// The techs whose chains start at each global. A global several
+		// techs hang chains from, like __NEXT_DATA__, is set by one of them
+		// (or by something else): its assignment says nothing about the
+		// others' properties, so only chains that are the global itself
+		// count for it.
+		users := make(map[string]map[string]bool)
+		for _, fp := range f.Apps {
+			for _, kp := range fp.js {
+				if root := jsRoot(kp.key); root != "" {
+					if users[root] == nil {
+						users[root] = make(map[string]bool)
+					}
+					users[root][fp.name] = true
+				}
+			}
+		}
 		for _, fp := range f.Apps {
 			seen := make(map[string]bool)
 			for _, kp := range fp.js {
 				root := jsRoot(kp.key)
 				if root == "" || seen[root] || !unconstrained(kp.pattern) {
+					continue
+				}
+				if root != kp.key && len(users[root]) > 1 {
 					continue
 				}
 				seen[root] = true
