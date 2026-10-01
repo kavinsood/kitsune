@@ -4115,7 +4115,12 @@
             "cats": [
                 31
             ],
+            "cookies": {
+                "aka_a2": ""
+            },
             "headers": {
+                "akamai-cache-status": "",
+                "akamai-grn": "",
                 "x-akamai-transformed": "",
                 "x-edgeconnect-midmile-rtt": "",
                 "x-edgeconnect-origin-mex-latency": ""
@@ -80113,10 +80118,13 @@
                 "React.version": "^([\\d\\.]+)$\\;version:\\1",
                 "ReactOnRails": "",
                 "__REACT_ON_RAILS_EVENT_HANDLERS_RAN_ONCE__": "",
-                "__isReactFizzContext": ""
+                "__isReactFizzContext": "",
+                "__remixContext": "",
+                "__remixRouteModules": ""
             },
             "html": [
-                "<[^>]+data-react"
+                "<[^>]+data-react",
+                "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
             ],
             "scripts": [
                 "@license React\\s.{0,80}react(?:\\.production(?:\\.min)?|\\.development)?\\.js",
@@ -80248,7 +80256,8 @@
                 "__reactRouterVersion": "^([\\d\\.]+)$\\;version:\\1"
             },
             "html": [
-                "window\\.__reactRouter(?:Context|Manifest)\\s*="
+                "window\\.__reactRouter(?:Context|Manifest)\\s*=",
+                "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
             ],
             "scriptSrc": [
                 "(?:/react-router(@|/)([\\d.]+)(?:/[a-z]+)?)?/react-router(?:\\.min)?\\.js\\;version:\\2"
@@ -81577,6 +81586,14 @@
                 18,
                 22
             ],
+            "dom": {
+                "[data-remix-managed-head]": {
+                    "exists": ""
+                },
+                "link[data-rmx-key]": {
+                    "exists": ""
+                }
+            },
             "js": {
                 "__remixContext": "",
                 "__remixRouteModules": "",
@@ -81584,10 +81601,6 @@
             },
             "html": [
                 "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
-            ],
-            "implies": [
-                "React",
-                "React Router"
             ],
             "description": "Remix is a React framework used for server-side rendering (SSR).",
             "website": "https://remix.run/",

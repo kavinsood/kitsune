@@ -45,6 +45,10 @@
         "Snowplow Analytics": {
             "_comment": "Bare sp.js matched any script named like *sp.js (wsp.js, asp.js).",
             "scriptSrc": "sp\\.js\\;confidence:50"
+        },
+        "Remix": {
+            "_comment": "Remix 3 isn't built on React. React and React Router are now detected from the globals of Remix 1-2 (see add).",
+            "implies": ["React", "React Router"]
         }
     },
     "set": {
@@ -125,9 +129,17 @@
         },
         "React Router": {
             "js": {"__reactRouterContext": "", "__reactRouterManifest": "", "__reactRouterRouteModules": ""},
-            "html": "window\\.__reactRouter(?:Context|Manifest)\\s*="
+            "html": ["window\\.__reactRouter(?:Context|Manifest)\\s*=", "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="]
         },
         "Remix": {
+            "_comment": "Remix 3 marks the head elements it manages.",
+            "html": "window\\.__remix(?:Context|Manifest|RouteModules)\\s*=",
+            "dom": ["[data-remix-managed-head]", "link[data-rmx-key]"],
+            "description": "Remix is a full-stack web framework. Remix 1 and 2 are built on React; Remix 3 is not."
+        },
+        "React": {
+            "_comment": "Remix 1-2 globals, which Remix no longer implies React from.",
+            "js": {"__remixContext": "", "__remixRouteModules": ""},
             "html": "window\\.__remix(?:Context|Manifest|RouteModules)\\s*="
         },
         "Vue.js": {
@@ -190,6 +202,11 @@
         },
         "Payload CMS": {
             "html": "<[^>]+(?:src|href)=\"[^\"]*/api/media/file/"
+        },
+        "Akamai": {
+            "_comment": "Akamai's request reference header and its Adaptive Acceleration cookie.",
+            "headers": {"akamai-grn": "", "akamai-cache-status": ""},
+            "cookies": {"aka_a2": ""}
         }
     }
 }
