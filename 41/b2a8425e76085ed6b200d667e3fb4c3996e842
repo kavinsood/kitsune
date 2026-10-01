@@ -1,0 +1,35 @@
+cmd/update-fingerprints/corpus.go
+  s_7b48d03f44c334::t_a82f209fc707cd 1-74
+cmd/update-fingerprints/lint.go
+  s_7b48d03f44c334::t_ea432ea7119f8b 1-356
+cmd/update-fingerprints/main.go
+  s_7b48d03f44c334::t_f1453f69ead03a 1-4,6,8-38,42,52-69,72-73,76,78,81-98,101-104,106-111,114-115,117-118,120-121,123-126,128-129,132-134,136-141,143-155,158,160,162,165-173,176-180,182,184-189,191-197,199-202,205-213,215-225,227-233,235-245,247-248,250-252,254-260,263-265,267-273,276
+cmd/update-fingerprints/merge.go
+  s_7b48d03f44c334::t_35b32eab796be2 1-272
+cmd/update-fingerprints/overrides.go
+  s_7b48d03f44c334::t_f6c4c8a7562574 1-365
+cmd/update-fingerprints/rewrite.go
+  s_7b48d03f44c334::t_75f89afdd4313e 1-229
+cmd/update-fingerprints/source.go
+  s_7b48d03f44c334::t_f4af7de3877118 1-268
+cmd/update-fingerprints/tech.go
+  s_7b48d03f44c334::t_3561d10587207c 1-492
+cmd/update-fingerprints/transform.go
+  s_7b48d03f44c334::t_9fe83523c498f9 1-57
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "41b2a8425e76085ed6b200d667e3fb4c3996e842",
+  "prompts": {},
+  "sessions": {
+    "s_7b48d03f44c334": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a5a25a13ce1c3855a",
+        "model": "unknown"
+      },
+      "human_author": "Kavin Sood <68739182+kavinsood@users.noreply.github.com>"
+    }
+  }
+}
