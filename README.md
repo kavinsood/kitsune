@@ -148,8 +148,8 @@ recent request events (CPU time, memory, cold starts) in KV.
 
 Kitsune's reliability comes from its unique data pipeline.
 
-  * **Data Sources:** The fingerprints (`assets/fingerprints_data.json`, `assets/categories_data.json`) merge three Wappalyzer-format sources, ranked highest first:
-    1. the latest Wappalyzer Firefox extension (`.xpi`) from addons.mozilla.org;
+  * **Data Sources:** The fingerprints (`assets/fingerprints_data.json`, `assets/categories_data.json`) merge four Wappalyzer-format sources, ranked highest first:
+    1. the latest Wappalyzer extension, from both the Chrome Web Store (`.crx`) and addons.mozilla.org (`.xpi`), with the newer version ranked first;
     2. [enthec/webappanalyzer](https://github.com/enthec/webappanalyzer), at a pinned commit;
     3. [HTTPArchive/wappalyzer](https://github.com/HTTPArchive/wappalyzer), at a pinned commit.
 
@@ -168,7 +168,7 @@ go test ./...
 Useful flags:
 
   * `-enthec-ref` and `-httparchive-ref` move the pinned commits; they also accept branch names.
-  * `-extension`, `-enthec` and `-httparchive` use local copies (directories or `.xpi`/`.zip` archives) instead of downloading.
+  * `-chrome`, `-extension` (Firefox), `-enthec` and `-httparchive` use local copies (directories or `.crx`/`.xpi`/`.zip` archives) instead of downloading.
   * `-sources` picks the sources and their ranking.
   * `-v` prints every lint finding.
   * `-accept-lint` accepts the current lint errors into the baseline.

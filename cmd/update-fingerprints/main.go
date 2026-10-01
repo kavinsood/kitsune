@@ -5,10 +5,15 @@
 //
 // The sources, highest-ranked first (see merge.go for what ranking means):
 //
+//   - chrome: the latest Wappalyzer Chrome extension, from the Chrome Web
+//     Store;
 //   - extension: the latest Wappalyzer Firefox extension, from
 //     addons.mozilla.org;
 //   - enthec: github.com/enthec/webappanalyzer, at a pinned commit;
 //   - httparchive: github.com/HTTPArchive/wappalyzer, at a pinned commit.
+//
+// The two extensions are ranked by version, newest first, whatever their
+// order in -sources: the stores don't always get a release at the same time.
 //
 // The update proceeds in steps:
 //
@@ -35,17 +40,21 @@
 //	go generate ./internal/profiler
 //
 // To run offline, point it at local copies of the sources (directories, or
-// .xpi/.zip archives) with -extension, -enthec and -httparchive.
+// .crx/.xpi/.zip archives) with -chrome, -extension, -enthec and
+// -httparchive.
 package main
 
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -57,7 +66,8 @@ var (
 	acceptLint      = flag.Bool("accept-lint", false, "accept the current lint errors, rewriting the baseline")
 	verbose         = flag.Bool("v", false, "print every lint finding")
 
-	sourcesFlag    = flag.String("sources", "extension,enthec,httparchive", "sources to merge, highest-ranked first")
+	sourcesFlag    = flag.String("sources", "chrome,extension,enthec,httparchive", "sources to merge, highest-ranked first")
+	chromePath     = flag.String("chrome", "", "local copy of the Chrome extension (unzipped directory or .crx) to use instead of downloading it")
 	extensionPath  = flag.String("extension", "", "local copy of the extension (unzipped directory or .xpi) to use instead of downloading it")
 	enthecPath     = flag.String("enthec", "", "local copy of enthec/webappanalyzer (directory or .zip) to use instead of downloading it")
 	enthecRefFlag  = flag.String("enthec-ref", enthecRef, "git ref of enthec/webappanalyzer to download")
@@ -97,6 +107,8 @@ func main() {
 		l.fixSelectors(src.techs)
 		sources = append(sources, src)
 	}
+
+	rankExtensions(sources)
 
 	// 2. Merge them.
 	techs := mergeSources(sources, stats)
@@ -184,6 +196,7 @@ func main() {
 // selectSources returns the specs of the named sources, in order.
 func selectSources(names string) ([]sourceSpec, error) {
 	all := map[string]sourceSpec{
+		"chrome":      {name: "chrome", url: func(string) string { return chromeURL }, ref: "latest", local: *chromePath},
 		"extension":   {name: "extension", url: func(string) string { return extensionURL }, ref: "latest", local: *extensionPath},
 		"enthec":      {name: "enthec", url: githubArchive("enthec/webappanalyzer"), ref: *enthecRefFlag, local: *enthecPath},
 		"httparchive": {name: "httparchive", url: githubArchive("HTTPArchive/wappalyzer"), ref: *httpaRefFlag, local: *httpaPath},
@@ -200,6 +213,43 @@ func selectSources(names string) ([]sourceSpec, error) {
 		return nil, fmt.Errorf("no sources")
 	}
 	return specs, nil
+}
+
+// rankExtensions reorders the extension sources among the slots they hold
+// in sources, newest version first.
+func rankExtensions(sources []*source) {
+	var slots []int
+	var exts []*source
+	for i, src := range sources {
+		if src.manifest != "" {
+			slots = append(slots, i)
+			exts = append(exts, src)
+		}
+	}
+	sort.SliceStable(exts, func(i, j int) bool {
+		return compareVersions(exts[i].manifest, exts[j].manifest) > 0
+	})
+	for k, i := range slots {
+		sources[i] = exts[k]
+	}
+}
+
+// compareVersions compares dotted version numbers.
+func compareVersions(a, b string) int {
+	as, bs := strings.Split(a, "."), strings.Split(b, ".")
+	for i := 0; i < max(len(as), len(bs)); i++ {
+		var x, y int
+		if i < len(as) {
+			x, _ = strconv.Atoi(as[i])
+		}
+		if i < len(bs) {
+			y, _ = strconv.Atoi(bs[i])
+		}
+		if x != y {
+			return cmp.Compare(x, y)
+		}
+	}
+	return 0
 }
 
 func printCounter(title string, c counter) {

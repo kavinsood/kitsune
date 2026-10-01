@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,8 +24,13 @@ const (
 	httparchiveRef = "20436693e89619e5e7eb5237576ec970ce688127"
 )
 
-// extensionURL is the latest release of the Wappalyzer Firefox extension.
-const extensionURL = "https://addons.mozilla.org/firefox/downloads/latest/wappalyzer/wappalyzer.xpi"
+// The latest releases of the Wappalyzer extension: for Firefox, from
+// addons.mozilla.org, and for Chrome, from the Chrome Web Store. The Chrome
+// Web Store usually gets a release first.
+const (
+	extensionURL = "https://addons.mozilla.org/firefox/downloads/latest/wappalyzer/wappalyzer.xpi"
+	chromeURL    = "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=140.0&acceptformat=crx2,crx3&x=id%3Dgppongmhjkpfnbhagpmjfkannfbllamg%26uc"
+)
 
 // sourceSpec describes where to get a source.
 type sourceSpec struct {
@@ -32,8 +38,8 @@ type sourceSpec struct {
 	// url returns the URL of the archive of the source at ref.
 	url func(ref string) string
 	ref string
-	// local is a local copy (a directory or a .zip/.xpi archive) to use
-	// instead of downloading, if set.
+	// local is a local copy (a directory or a .zip/.xpi/.crx archive) to
+	// use instead of downloading, if set.
 	local string
 }
 
@@ -48,7 +54,9 @@ type source struct {
 	name string
 	// version is the version of the source: the extension's version or the
 	// git ref.
-	version    string
+	version string
+	// manifest is the extension's version, if the source is an extension.
+	manifest   string
 	techs      map[string]*Tech
 	categories map[string]*Category
 }
@@ -78,6 +86,7 @@ func loadSource(spec sourceSpec, stats counter) (*source, error) {
 	}
 	src := &source{name: spec.name, version: version}
 	if v := manifestVersion(fsys); v != "" {
+		src.manifest = v
 		src.version = v + ", " + version
 	}
 	if src.techs, err = readTechs(fsys, stats); err != nil {
@@ -101,9 +110,13 @@ func openSource(spec sourceSpec) (fs.FS, string, error) {
 		if info.IsDir() {
 			return os.DirFS(spec.local), version, nil
 		}
-		r, err := zip.OpenReader(spec.local)
+		data, err := os.ReadFile(spec.local)
 		if err != nil {
 			return nil, "", err
+		}
+		r, err := openZip(data)
+		if err != nil {
+			return nil, "", fmt.Errorf("%s: %w", spec.local, err)
 		}
 		return r, version, nil
 	}
@@ -114,11 +127,48 @@ func openSource(spec sourceSpec) (fs.FS, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	r, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	r, err := openZip(data)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s: %w", url, err)
 	}
 	return r, spec.ref, nil
+}
+
+// openZip opens a zip archive, or a Chrome extension: a zip archive after
+// a CRX header.
+func openZip(data []byte) (*zip.Reader, error) {
+	if bytes.HasPrefix(data, []byte("Cr24")) {
+		var err error
+		if data, err = stripCRX(data); err != nil {
+			return nil, err
+		}
+	}
+	return zip.NewReader(bytes.NewReader(data), int64(len(data)))
+}
+
+// stripCRX returns the zip archive in a CRX file.
+func stripCRX(data []byte) ([]byte, error) {
+	if len(data) < 12 {
+		return nil, fmt.Errorf("short CRX header")
+	}
+	version := binary.LittleEndian.Uint32(data[4:8])
+	var start uint64
+	switch version {
+	case 2:
+		// Public key and signature lengths follow the version.
+		if len(data) < 16 {
+			return nil, fmt.Errorf("short CRX2 header")
+		}
+		start = 16 + uint64(binary.LittleEndian.Uint32(data[8:12])) + uint64(binary.LittleEndian.Uint32(data[12:16]))
+	case 3:
+		start = 12 + uint64(binary.LittleEndian.Uint32(data[8:12]))
+	default:
+		return nil, fmt.Errorf("unknown CRX version %d", version)
+	}
+	if start > uint64(len(data)) {
+		return nil, fmt.Errorf("CRX header longer than the file")
+	}
+	return data[start:], nil
 }
 
 // maxDownload bounds the size of a downloaded archive.

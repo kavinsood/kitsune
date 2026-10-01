@@ -1,10 +1,14 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -138,7 +142,7 @@ func TestCheckMatchesAnything(t *testing.T) {
 
 func TestApplyOverrides(t *testing.T) {
 	techs := map[string]*Tech{
-		"A": normalizeJSON(t, `{"cats":[1],"html":["a","b"],"meta":{"generator":["x","y"]},"dom":"#a, #b","headers":{"server":"s\\;version:\\1"}}`),
+		"A":    normalizeJSON(t, `{"cats":[1],"html":["a","b"],"meta":{"generator":["x","y"]},"dom":"#a, #b","headers":{"server":"s\\;version:\\1"}}`),
 		"Gone": normalizeJSON(t, `{"cats":[1],"html":"g"}`),
 	}
 	ovr := `{
@@ -183,5 +187,48 @@ func TestApplyOverrides(t *testing.T) {
 	}
 	if _, err := applyOverrides(file, techs, newLinter()); err == nil {
 		t.Error("invalid regex: no error")
+	}
+}
+
+func TestOpenZipCRX(t *testing.T) {
+	var zbuf bytes.Buffer
+	zw := zip.NewWriter(&zbuf)
+	w, _ := zw.Create("manifest.json")
+	w.Write([]byte(`{"version":"1.2.3"}`))
+	zw.Close()
+
+	header := []byte("proto-header")
+	crx := []byte("Cr24")
+	crx = binary.LittleEndian.AppendUint32(crx, 3)
+	crx = binary.LittleEndian.AppendUint32(crx, uint32(len(header)))
+	crx = append(append(crx, header...), zbuf.Bytes()...)
+
+	for name, data := range map[string][]byte{"zip": zbuf.Bytes(), "crx3": crx} {
+		r, err := openZip(data)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if v := manifestVersion(r); v != "1.2.3" {
+			t.Errorf("%s: manifest version %q, want 1.2.3", name, v)
+		}
+	}
+	if _, err := openZip(crx[:20]); err == nil {
+		t.Error("truncated CRX opened")
+	}
+}
+
+func TestRankExtensions(t *testing.T) {
+	sources := []*source{
+		{name: "chrome", manifest: "6.12.7"},
+		{name: "extension", manifest: "6.12.10"},
+		{name: "enthec"},
+	}
+	rankExtensions(sources)
+	var got []string
+	for _, s := range sources {
+		got = append(got, s.name)
+	}
+	if want := "extension,chrome,enthec"; strings.Join(got, ",") != want {
+		t.Errorf("got %s, want %s", strings.Join(got, ","), want)
 	}
 }

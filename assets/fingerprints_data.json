@@ -1039,6 +1039,22 @@
             "cpe": "cpe:2.3:a:laurent_destailleur:awstats:*:*:*:*:*:*:*:*",
             "icon": "AWStats.png"
         },
+        "AXENTRA OS": {
+            "cats": [
+                84,
+                100
+            ],
+            "js": {
+                "axentraFetchCached": "",
+                "axentraLoadScript": ""
+            },
+            "implies": [
+                "Shopify"
+            ],
+            "description": "AXENTRA OS is a Shopify app for customer accounts, loyalty, order management, returns, subscriptions, reviews, and other post-purchase features.",
+            "website": "https://axentraos.com",
+            "icon": "AXENTRA OS.png"
+        },
         "Aacio": {
             "cats": [
                 6
@@ -4508,6 +4524,9 @@
             },
             "scripts": [
                 "algoliasearch"
+            ],
+            "xhr": [
+                "\\.algolia\\.net$"
             ],
             "description": "Algolia offers a hosted web search product delivering real-time results.",
             "website": "https://www.algolia.com",
@@ -8775,6 +8794,22 @@
             "website": "https://auspost.com.au",
             "icon": "AusPost.svg"
         },
+        "Autegro": {
+            "cats": [
+                6
+            ],
+            "dom": {
+                "script[data-ac24-widget][data-ac24-app-url='https://app.autegro.de']": {
+                    "exists": ""
+                }
+            },
+            "scriptSrc": [
+                "^https?://app\\.autegro\\.de/widget\\.js(?:\\?|$)"
+            ],
+            "description": "Autegro is a vehicle inventory and sales platform that integrates vehicle listings, detail pages, and lead forms into dealership websites.",
+            "website": "https://www.autegro.de",
+            "icon": "Autegro.svg"
+        },
         "Auth0": {
             "cats": [
                 69
@@ -11792,6 +11827,46 @@
             "website": "https://www.bitrix24.com",
             "cpe": "cpe:2.3:a:bitrix24:bitrix24:*:*:*:*:*:*:*:*",
             "icon": "Bitrix24.svg"
+        },
+        "Bits UI": {
+            "cats": [
+                66
+            ],
+            "css": [
+                "--bits-(?:accordion|popover|select|tooltip)-"
+            ],
+            "dom": {
+                "[id^='bits-'][data-accordion-root]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-checkbox-root]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-dialog-trigger]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-dropdown-menu-trigger]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-popover-trigger]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-select-trigger]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-tabs-root]": {
+                    "exists": ""
+                },
+                "[id^='bits-'][data-tooltip-trigger]": {
+                    "exists": ""
+                }
+            },
+            "implies": [
+                "Svelte"
+            ],
+            "description": "Bits UI is an open-source headless component library for building accessible Svelte interfaces.",
+            "website": "https://bits-ui.com",
+            "icon": "Bits UI.svg"
         },
         "BittAds": {
             "cats": [
@@ -21346,6 +21421,22 @@
             "website": "https://www.comm100.com",
             "icon": "Comm100.svg"
         },
+        "CommBox": {
+            "cats": [
+                52
+            ],
+            "dom": {
+                "#commbox_splash > svg.cb_svg": {
+                    "exists": ""
+                }
+            },
+            "scriptSrc": [
+                "^https?://apps\\.commbox\\.io/+Scripts/connect\\.js(?:\\?|$)"
+            ],
+            "description": "CommBox is a customer communication platform with live chat, AI agents, and automation across messaging, voice, and web channels.",
+            "website": "https://www.commbox.io",
+            "icon": "CommBox.png"
+        },
         "Commanders Act TagCommander": {
             "cats": [
                 42
@@ -24694,6 +24785,28 @@
             "cpe": "cpe:2.3:a:d3.js_project:d3.js:*:*:*:*:*:*:*:*",
             "icon": "D3.svg"
         },
+        "D4 Core": {
+            "cats": [
+                18
+            ],
+            "cookies": {
+                "csrf_d4": ""
+            },
+            "headers": {
+                "x-powered-by": "(?:^|,\\s*)D4 Core(?:\\s+([\\d.]+))?(?:\\s*,|$)\\;version:\\1"
+            },
+            "meta": {
+                "generator": [
+                    "^(?:D4 Core(?: v?([\\d.]+))?|D4 - Web Application Framework)$\\;version:\\1"
+                ]
+            },
+            "implies": [
+                "PHP"
+            ],
+            "description": "D4 Core is a PHP web application framework.",
+            "website": "https://d4.si",
+            "icon": "D4 Core.png"
+        },
         "DCKAP Commerce": {
             "cats": [
                 6
@@ -27314,6 +27427,26 @@
             "website": "https://www.docusign.com",
             "icon": "DocuSign.svg"
         },
+        "Docus": {
+            "cats": [
+                4
+            ],
+            "css": [
+                "\\.docus-sub-header\\s*\\{[^}]*--ui-header-height:\\s*112px"
+            ],
+            "js": {
+                "__NUXT__.config.public.docus": ""
+            },
+            "scripts": [
+                "apiPath:\"/__docus__/assistant\""
+            ],
+            "implies": [
+                "Nuxt.js"
+            ],
+            "description": "Docus is an open-source documentation framework built with Nuxt and Markdown.",
+            "website": "https://docus.dev",
+            "icon": "Docus.svg"
+        },
         "Docusaurus": {
             "cats": [
                 4,
@@ -29101,7 +29234,11 @@
                     "exists": ""
                 }
             },
+            "js": {
+                "__NEXT_DATA__.assetPrefix": "^https://cdn\\.easyorders\\.shop/?$"
+            },
             "xhr": [
+                "^api\\.easy-orders\\.net$",
                 "api\\.easy-orders\\.net/"
             ],
             "implies": [
@@ -29112,8 +29249,8 @@
             "requires": [
                 "Next.js"
             ],
-            "description": "Easy Orders is an ecommerce platform that offers a pricing plan where users can create their online store and pay a fee of 0.5 EGP per order.",
-            "website": "https://www.easy-orders.net",
+            "description": "Easy Orders is a hosted ecommerce platform for creating online stores and managing products and orders.",
+            "website": "https://www.easyorders.eg",
             "icon": "Easy Orders.svg"
         },
         "Easy Pie Chart": {
@@ -30152,6 +30289,22 @@
             "description": "Elenore is a business management software platform designed to streamline operations and support business growth.",
             "website": "https://elenore.io",
             "icon": "Elenore.svg"
+        },
+        "Elephantfy": {
+            "cats": [
+                6
+            ],
+            "headers": {
+                "x-powered-by": "^Elephantfy(?:/[\\d.]+)?$"
+            },
+            "meta": {
+                "generator": [
+                    "^Elephantfy$"
+                ]
+            },
+            "description": "Elephantfy is a Brazilian ecommerce platform for creating and managing online stores.",
+            "website": "https://elephantfy.com.br",
+            "icon": "Elephantfy.png"
         },
         "Elevar": {
             "cats": [
@@ -41043,6 +41196,11 @@
                 41
             ],
             "dom": {
+                "#express-checkout-wallets-wrapper iframe#GOOGLE_PAY-iframe": {
+                    "attributes": {
+                        "src": "^https://checkout\\.shopify\\.com/[0-9]+/sandboxes/wallets\\?(?:[^#]*&)?wallet=GOOGLE_PAY(?:&|$)"
+                    }
+                },
                 "[aria-labelledby='pi-google_pay']": {
                     "exists": ""
                 },
@@ -41378,6 +41536,17 @@
             "description": "Grade.us is a review management platform for marketing agencies.",
             "website": "https://www.grade.us",
             "icon": "GradeUs.svg"
+        },
+        "Gradual": {
+            "cats": [
+                2
+            ],
+            "scripts": [
+                "GradualPublicLayout"
+            ],
+            "description": "Gradual is a community platform for hosting events, publishing content and courses, and connecting members.",
+            "website": "https://www.gradual.com",
+            "icon": "Gradual.png"
         },
         "Grafana": {
             "cats": [
@@ -46047,12 +46216,18 @@
                 6
             ],
             "scriptSrc": [
+                "/(?:idea|shop)/[a-z]{2}/\\d+/themes/selftpl_[a-f\\d]+/renders/javascript/",
                 "\\.ideasoft\\.dev/",
                 "\\.myideasoft\\.com/([\\d.]+)\\;version:\\1"
             ],
-            "description": "Ideasoft is a Turkish software company providing web-based software solutions, software design, ecommerce solutions, and other services.",
+            "meta": {
+                "copyright": [
+                    "IdeaSoft Akıllı E-Ticaret"
+                ]
+            },
+            "description": "Ideasoft is a hosted ecommerce platform for creating and managing online stores.",
             "website": "https://www.ideasoft.com.tr",
-            "icon": "Ideasoft.svg"
+            "icon": "Ideasoft.png"
         },
         "Identixweb iCart": {
             "cats": [
@@ -50879,6 +51054,29 @@
             "cpe": "cpe:2.3:a:keybase:keybase:*:*:*:*:*:*:*:*",
             "icon": "Keybase.svg"
         },
+        "Keycloak": {
+            "cats": [
+                69
+            ],
+            "dom": {
+                "#kc-form-login[action*='/realms/'][action*='/login-actions/authenticate']": {
+                    "exists": ""
+                }
+            },
+            "cookies": {
+                "kc_restart": ""
+            },
+            "url": [
+                "^https?://[^/]+/(?:auth/)?realms/[^/?#]+/protocol/openid-connect/auth(?:[/?#]|$)"
+            ],
+            "implies": [
+                "Java"
+            ],
+            "description": "Keycloak is an open-source identity and access management system.",
+            "website": "https://www.keycloak.org/",
+            "cpe": "cpe:2.3:a:redhat:keycloak:*:*:*:*:*:*:*:*",
+            "icon": "Keycloak.svg"
+        },
         "Keymailer": {
             "cats": [
                 32
@@ -51158,6 +51356,13 @@
                     "attributes": {
                         "content": "/media/pages/.+/[a-f\\d]{10}-\\d+/",
                         "href": "/media/pages/.+/[a-f\\d]{10}-\\d+/",
+                        "src": "/media/pages/.+/[a-f\\d]{10}-\\d+/",
+                        "srcset": "/media/pages/.+/[a-f\\d]{10}-\\d+/"
+                    }
+                },
+                "[content*='/media/pages/'], [src*='/media/pages/'], [srcset*='/media/pages/']": {
+                    "attributes": {
+                        "content": "/media/pages/.+/[a-f\\d]{10}-\\d+/",
                         "src": "/media/pages/.+/[a-f\\d]{10}-\\d+/",
                         "srcset": "/media/pages/.+/[a-f\\d]{10}-\\d+/"
                     }
@@ -55571,8 +55776,7 @@
         },
         "LogaTech": {
             "cats": [
-                1,
-                51
+                1
             ],
             "headers": {
                 "x-powered-by": "^LogaTech$"
@@ -55582,7 +55786,7 @@
                     "^LogaTech$"
                 ]
             },
-            "description": "LogaTech is a web development company offering a platform used to build and manage multi-tenant CMS, CRM and e-commerce websites.",
+            "description": "LogaTech is a modular multi-tenant platform for building and managing content, ecommerce, CRM, learning, and community websites.",
             "website": "https://logatech.net",
             "icon": "LogaTech.png"
         },
@@ -60001,6 +60205,23 @@
             "cpe": "cpe:2.3:a:matchalabs:metaslider:*:*:*:*:*:wordpress:*:*",
             "icon": "MetaSlider.svg"
         },
+        "Metabase": {
+            "cats": [
+                10
+            ],
+            "dom": {
+                "script#_metabaseBootstrap[type='application/json']": {
+                    "exists": ""
+                }
+            },
+            "js": {
+                "MetabaseBootstrap.version.tag": "^v?(\\d+(?:\\.\\d+)+)$\\;version:\\1"
+            },
+            "description": "Metabase is an open-source business intelligence tool for querying databases and building dashboards and reports.",
+            "website": "https://www.metabase.com",
+            "cpe": "cpe:2.3:a:metabase:metabase:*:*:*:*:*:*:*:*",
+            "icon": "Metabase.svg"
+        },
         "Meteor": {
             "cats": [
                 12,
@@ -60936,6 +61157,21 @@
             "website": "https://minerstat.com",
             "icon": "Minerstat.svg"
         },
+        "MingCute": {
+            "cats": [
+                17
+            ],
+            "dom": {
+                "[class*='i-mingcute-']": {
+                    "attributes": {
+                        "class": "(?:^|\\s)i-mingcute-[a-z0-9-]+-(?:line|fill)(?:\\s|$)"
+                    }
+                }
+            },
+            "description": "MingCute is an open-source icon library for web and mobile interfaces.",
+            "website": "https://www.mingcute.com",
+            "icon": "MingCute.svg"
+        },
         "MiniBC": {
             "cats": [
                 41
@@ -61861,6 +62097,22 @@
             "website": "https://mollom.com",
             "cpe": "cpe:2.3:a:acquia:mollom:*:*:*:*:*:*:*:*",
             "icon": "Mollom.png"
+        },
+        "Momants": {
+            "cats": [
+                52
+            ],
+            "dom": {
+                "[data-agent][data-src='https://api-widget.momants.ai/widget.js']": {
+                    "exists": ""
+                }
+            },
+            "scriptSrc": [
+                "^https?://api-widget\\.momants\\.ai/widget\\.js(?:\\?|$)"
+            ],
+            "description": "Momants is an AI customer support and ticketing platform for events, festivals, and visitor attractions.",
+            "website": "https://www.momants.ai",
+            "icon": "Momants.svg"
         },
         "Momence": {
             "cats": [
@@ -62941,13 +63193,25 @@
         },
         "Mux": {
             "cats": [
+                14,
                 10
             ],
+            "dom": {
+                "iframe[src*='player.mux.com/']": {
+                    "exists": ""
+                },
+                "mux-player": {
+                    "exists": ""
+                },
+                "mux-video": {
+                    "exists": ""
+                }
+            },
             "js": {
                 "MuxVideoElement": "",
                 "initBitmovinMux": ""
             },
-            "description": "Mux is a platform offering integration to monitor video streaming performance using minimal lines of code.",
+            "description": "Mux is a video platform that provides streaming infrastructure, playback, and video analytics.",
             "website": "https://www.mux.com",
             "icon": "Mux.svg"
         },
@@ -64252,6 +64516,7 @@
                 "NETO": ""
             },
             "scriptSrc": [
+                "assets\\.netostatic\\.com/ecommerce/[\\d.]+/assets/js/common/webstore/main\\.js",
                 "jquery\\.neto.*\\.js"
             ],
             "description": "Neto is the only Australian B2B and multi-channel ecommerce platform that provides a solution for ecommerce, POS, inventory management, order management, and shipping labelling.",
@@ -67634,6 +67899,25 @@
             "website": "https://openai.com",
             "icon": "OpenAI.svg"
         },
+        "OpenAI Ads Measurement Pixel": {
+            "cats": [
+                36
+            ],
+            "dom": {
+                "script[data-bc-cookie-consent][type='text/plain']": {
+                    "text": "bzrcdn\\.openai\\.com/sdk/oaiq\\.min\\.js"
+                }
+            },
+            "js": {
+                "oaiq": ""
+            },
+            "scriptSrc": [
+                "^https://bzrcdn\\.openai\\.com/sdk/oaiq\\.min\\.js(?:[?#]|$)"
+            ],
+            "description": "OpenAI Ads Measurement Pixel is a browser SDK for measuring website events that can be attributed to ads in ChatGPT.",
+            "website": "https://developers.openai.com/ads/measurement-pixel",
+            "icon": "OpenAI Ads Measurement Pixel.svg"
+        },
         "OpenBSD httpd": {
             "cats": [
                 22
@@ -67861,7 +68145,10 @@
             "scriptSrc": [
                 "//openpanel\\.dev/"
             ],
-            "description": "OpenPanel is an open-source analytics library that enables developers to track and analyze user behavior, providing real-time insights and data visualization for improved decision-making across various platforms.",
+            "xhr": [
+                "api\\.openpanel\\.dev"
+            ],
+            "description": "OpenPanel is an open-source web and product analytics platform.",
             "website": "https://openpanel.dev",
             "cpe": "cpe:2.3:a:openpanel:openpanel:*:*:*:*:*:*:*:*",
             "icon": "OpenPanel.svg"
@@ -70971,6 +71258,11 @@
                 41
             ],
             "dom": {
+                "#express-checkout-wallets-wrapper iframe#PAYPAL_EXPRESS-iframe": {
+                    "attributes": {
+                        "src": "^https://checkout\\.shopify\\.com/[0-9]+/sandboxes/wallets\\?(?:[^#]*&)?wallet=PAYPAL_EXPRESS(?:&|$)"
+                    }
+                },
                 "[aria-labelledby='pi-paypal']": {
                     "exists": ""
                 },
@@ -79849,6 +80141,34 @@
             "cpe": "cpe:2.3:a:facebook:react:*:*:*:*:*:*:*:*",
             "icon": "React.svg"
         },
+        "React Aria": {
+            "cats": [
+                59
+            ],
+            "dom": {
+                "[class*=' react-aria-']": {
+                    "exists": ""
+                },
+                "[class^='react-aria-']": {
+                    "exists": ""
+                },
+                "[data-rac]": {
+                    "exists": ""
+                },
+                "[data-react-aria-pressable='true']": {
+                    "exists": ""
+                },
+                "[id^='react-aria-']": {
+                    "exists": ""
+                }
+            },
+            "implies": [
+                "React"
+            ],
+            "description": "React Aria is an open-source library of unstyled React components and hooks for building accessible user interfaces.",
+            "website": "https://react-aria.adobe.com",
+            "icon": "React Aria.svg"
+        },
         "React Bricks": {
             "cats": [
                 1
@@ -84561,6 +84881,19 @@
             "website": "https://saber.land/",
             "icon": "Saber.svg"
         },
+        "Sadrhub": {
+            "cats": [
+                6
+            ],
+            "meta": {
+                "generator": [
+                    "^sadrhub\\.com$"
+                ]
+            },
+            "description": "Sadrhub is a cloud-based ecommerce platform for creating and managing online stores.",
+            "website": "https://sadrhub.com",
+            "icon": "Sadrhub.png"
+        },
         "SafeBase": {
             "cats": [
                 16
@@ -86571,8 +86904,9 @@
                     "^Selify$"
                 ]
             },
-            "description": "Selify is an ecommerce platform for launching and managing online stores with integrated checkout and storefront tooling.",
-            "website": "https://selify.io"
+            "description": "Selify is an ecommerce SaaS platform for social media sales automation, enabling merchants to launch and manage online stores with integrated checkout tools.",
+            "website": "https://selify.io",
+            "icon": "Selify.svg"
         },
         "Seline": {
             "cats": [
@@ -87247,6 +87581,22 @@
             "description": "Seosphera is a web development platform designed to build, manage, and deploy websites and web applications.",
             "website": "https://seosphera.com",
             "icon": "Seosphera.svg"
+        },
+        "Sepid": {
+            "cats": [
+                21
+            ],
+            "css": [
+                "--sepid-primary-main"
+            ],
+            "dom": {
+                "a[href='https://sepid.org/'] img[src='/sepid-logo-dark.svg'][alt='سپید']": {
+                    "exists": ""
+                }
+            },
+            "description": "Sepid is a learning management system for creating and selling online courses.",
+            "website": "https://sepid.org",
+            "icon": "Sepid.svg"
         },
         "Seravo": {
             "cats": [
@@ -91405,6 +91755,20 @@
             "website": "https://www.sliderrevolution.com",
             "icon": "Slider Revolution.svg"
         },
+        "Slim Framework": {
+            "cats": [
+                18
+            ],
+            "cookies": {
+                "slim_session": ""
+            },
+            "implies": [
+                "PHP"
+            ],
+            "description": "Slim is an open-source PHP microframework for building web applications and APIs.",
+            "website": "https://www.slimframework.com",
+            "icon": "Slim Framework.png"
+        },
         "Slim SEO": {
             "cats": [
                 87
@@ -91495,6 +91859,22 @@
             "description": "Slingshot is a platform that integrates real-time analytics with project management and collaboration tools to support data-driven decision-making.",
             "website": "https://getslingshot.com",
             "icon": "Slingshot.svg"
+        },
+        "Slotted": {
+            "cats": [
+                72
+            ],
+            "dom": {
+                "iframe[title='Slotted booking'][src*='.slotted.so'][src*='embed=1']": {
+                    "exists": ""
+                }
+            },
+            "url": [
+                "\\.slotted\\.so(?:/|$)"
+            ],
+            "description": "Slotted is a booking and business management platform for time-based businesses.",
+            "website": "https://www.slotted.so",
+            "icon": "Slotted.png"
         },
         "Slotti": {
             "cats": [
@@ -92739,7 +93119,8 @@
                 }
             },
             "js": {
-                "Solid$$": ""
+                "Solid$$": "",
+                "_$HY.fe": ""
             },
             "scriptSrc": [
                 "www\\.solidjs\\.com"
@@ -94985,7 +95366,7 @@
                 "Statamic": ""
             },
             "headers": {
-                "x-powered-by": "(?:(?:^|\\r?\\n)Statamic$)|(?:^Statamic$)"
+                "x-powered-by": "(?:(?:(?:^|[,\\r\\n]\\s*)Statamic(?:\\s*[,\\r\\n]|$))|(?:(?:^|\\r?\\n)Statamic$))|(?:^Statamic$)"
             },
             "scripts": [
                 "statamic\\.cp"
@@ -96354,13 +96735,21 @@
         },
         "SumUp": {
             "cats": [
+                6,
                 41
             ],
+            "dom": {
+                "a[aria-label='SumUp Online Store']": {
+                    "attributes": {
+                        "href": "^https://www\\.sumup\\.com/[a-z]{2}-[a-z]{2}/online-store/$"
+                    }
+                }
+            },
             "js": {
                 "SumUpCard.debug": "",
                 "SumUpPayment.debug": ""
             },
-            "description": "SumUp is a provider of payment acceptance solutions.",
+            "description": "SumUp provides payment acceptance, point-of-sale, and online-store services.",
             "website": "https://www.sumup.com",
             "icon": "SumUp.svg"
         },
@@ -99938,6 +100327,21 @@
             "website": "https://www.thanx.com",
             "icon": "Thanx.svg"
         },
+        "That Open Engine": {
+            "cats": [
+                25
+            ],
+            "scripts": [
+                "@thatopen/(?:components(?:-front)?|fragments|ui(?:-obc)?|web-ifc)",
+                "FragmentsManager"
+            ],
+            "implies": [
+                "Three.js"
+            ],
+            "description": "That Open Engine is an open-source collection of JavaScript libraries for building browser-based BIM applications.",
+            "website": "https://docs.thatopen.com",
+            "icon": "That Open Engine.svg"
+        },
         "Thawte": {
             "cats": [
                 70
@@ -100690,6 +101094,24 @@
             "website": "https://themonic.com/iconic-one",
             "icon": "Themonic.svg"
         },
+        "TheraPsy Bookings": {
+            "cats": [
+                72
+            ],
+            "dom": {
+                "iframe[src*=\"bookings.therapsy.at\"]": {
+                    "attributes": {
+                        "src": "^https?://bookings\\.therapsy\\.at/\\?(?:[^#]*&)?id=[a-f0-9]{32}(?:[&#]|$)"
+                    }
+                }
+            },
+            "url": [
+                "^https?://bookings\\.therapsy\\.at/\\?(?:[^#]*&)?id=[a-f0-9]{32}(?:[&#]|$)"
+            ],
+            "description": "TheraPsy Bookings is an online appointment scheduling service for therapists with hosted booking pages and embeddable calendars.",
+            "website": "https://www.therapsy.at/funktionen/bookings",
+            "icon": "TheraPsy Bookings.svg"
+        },
         "Thesis": {
             "cats": [
                 10
@@ -101358,6 +101780,25 @@
             "description": "Tiiny Host is a web hosting service for static sites with support for custom domains, SSL, password protection, and built-in analytics.",
             "website": "https://tiiny.host",
             "icon": "Tiiny Host.svg"
+        },
+        "Tijara Plus": {
+            "cats": [
+                6
+            ],
+            "js": {
+                "TijaraPlus.platform": "^Tijara Plus$"
+            },
+            "headers": {
+                "x-tijara-plus": "^store$"
+            },
+            "meta": {
+                "generator": [
+                    "^Tijara Plus$"
+                ]
+            },
+            "description": "Tijara Plus is a hosted ecommerce platform for creating online stores and managing products, payments, and shipping.",
+            "website": "https://tijaraplus.com",
+            "icon": "Tijara Plus.png"
         },
         "TikShop": {
             "cats": [
@@ -107629,6 +108070,23 @@
             "website": "https://apps.shopify.com/videogreet-gift-messages",
             "icon": "Video Greet.svg"
         },
+        "VideoAsk": {
+            "cats": [
+                110
+            ],
+            "js": {
+                "videoask.loadEmbed": ""
+            },
+            "scriptSrc": [
+                "^https?://(?:www\\.|static\\.)?videoask\\.com/embed/embed\\.js(?:[?#]|$)"
+            ],
+            "url": [
+                "^https?://(?:www\\.)?videoask\\.com/f[a-z0-9]{8}(?:[/?#]|$)"
+            ],
+            "description": "VideoAsk is a platform for creating interactive video forms and embedding conversational video widgets on websites.",
+            "website": "https://www.videoask.com",
+            "icon": "VideoAsk.svg"
+        },
         "VideoJS": {
             "cats": [
                 14
@@ -112489,6 +112947,17 @@
             "description": "Wiremo is a customer review platform designed for eCommerce businesses to collect, manage, and display user-generated feedback.",
             "website": "https://wiremo.co",
             "icon": "Wiremo.svg"
+        },
+        "Wirsindhandwerk": {
+            "cats": [
+                90
+            ],
+            "scriptSrc": [
+                "^https?://w\\.(?:wsh|wirsindhandwerk)\\.de/(?:[a-f0-9]{32}|[a-z0-9]{40})\\.js(?:[?#]|$)"
+            ],
+            "description": "Wirsindhandwerk is a customer review platform for trades businesses with embeddable rating widgets.",
+            "website": "https://www.wirsindhandwerk.de",
+            "icon": "Wirsindhandwerk.svg"
         },
         "Wise Agent": {
             "cats": [
@@ -117537,6 +118006,25 @@
             "website": "https://adcaptcha.com",
             "icon": "adCAPTCHA.svg"
         },
+        "alugha": {
+            "cats": [
+                14
+            ],
+            "dom": {
+                "iframe[src^='//alugha.com/embed/web-player']": {
+                    "exists": ""
+                },
+                "iframe[src^='http://alugha.com/embed/web-player']": {
+                    "exists": ""
+                },
+                "iframe[src^='https://alugha.com/embed/web-player']": {
+                    "exists": ""
+                }
+            },
+            "description": "alugha is a video hosting and localization platform with a multilingual player, subtitles, audio tracks, translation, and dubbing tools.",
+            "website": "https://alugha.com",
+            "icon": "alugha.png"
+        },
         "amCharts": {
             "cats": [
                 25
@@ -122225,6 +122713,25 @@
             "description": "WPCache is a static caching plugin for WordPress.",
             "website": "https://wpcache.co",
             "icon": "wpCache.png"
+        },
+        "wpForo": {
+            "cats": [
+                87
+            ],
+            "dom": {
+                "link[href*='/wp-content/plugins/wpforo/']": {
+                    "exists": ""
+                },
+                "script[src*='/wp-content/plugins/wpforo/']": {
+                    "exists": ""
+                }
+            },
+            "implies": [
+                "WordPress"
+            ],
+            "description": "wpForo is a WordPress plugin for building discussion forums and online communities.",
+            "website": "https://wpforo.com",
+            "icon": "wpForo.png"
         },
         "xCharts": {
             "cats": [
