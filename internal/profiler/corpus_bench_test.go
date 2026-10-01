@@ -10,6 +10,8 @@ package profiler
 //
 //	KITSUNE_CORPUS=/tmp/kitsune-corpus go test ./internal/profiler -run TestCorpusDetections -v
 //	KITSUNE_CORPUS=/tmp/kitsune-corpus go test ./internal/profiler -run '^$' -bench BenchmarkCorpus -benchmem
+//
+// KITSUNE_CORPUS_SITES (comma-separated URLs) replaces the list of sites.
 
 import (
 	"bytes"
@@ -38,6 +40,10 @@ var corpusSites = []string{
 	"https://www.hackerone.com/",
 	"https://react.dev/",
 	"https://www.shopify.com/",
+	// Heavy bundles: most of their analysis is matching fetched JS.
+	"https://nextjs.org/",
+	"https://www.gymshark.com/",
+	"https://www.wix.com/",
 }
 
 type corpusEntry struct {
@@ -52,6 +58,13 @@ type corpusSite struct {
 	Headers map[string][]string `json:"headers"`
 	Body    string              `json:"body_file"`
 	Entries []corpusEntry       `json:"entries"`
+}
+
+func sitesOfCorpus() []string {
+	if env := os.Getenv("KITSUNE_CORPUS_SITES"); env != "" {
+		return strings.Split(env, ",")
+	}
+	return corpusSites
 }
 
 func corpusDir(tb testing.TB) string {
@@ -75,7 +88,7 @@ func TestCorpusFetch(t *testing.T) {
 	client := &http.Client{Timeout: 20 * time.Second}
 	const ua = "Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.5931.0 Safari/537.36"
 
-	for _, site := range corpusSites {
+	for _, site := range sitesOfCorpus() {
 		sdir := filepath.Join(dir, siteDirName(site))
 		if err := os.MkdirAll(sdir, 0o755); err != nil {
 			t.Fatal(err)
@@ -173,7 +186,7 @@ type loadedSite struct {
 func loadCorpus(tb testing.TB) []*loadedSite {
 	dir := corpusDir(tb)
 	var sites []*loadedSite
-	for _, site := range corpusSites {
+	for _, site := range sitesOfCorpus() {
 		sdir := filepath.Join(dir, siteDirName(site))
 		raw, err := os.ReadFile(filepath.Join(sdir, "manifest.json"))
 		if err != nil {
